@@ -61,6 +61,7 @@
   /* 保存ボタン（フロッピーディスクの絵）。保存していない変更があるときは右上に点を出す */
   .save-button { position: relative; display: flex; align-items: center; justify-content: center; padding: 7px 10px; }
   .save-button svg { display: block; }
+  .save-button .caret { font-size: 11px; margin-left: 3px; }
   .save-button.unsaved::after {
     content: "";
     position: absolute;
@@ -241,26 +242,31 @@
 <header>
   <h1><span class="title-full">フィッシュボーン図メーカー</span><span class="title-short">フィッシュボーン図</span></h1>
   <span class="hint">図の文字をクリックすると入力できます</span>
-  <button class="save-button" id="saveButton" title="ファイルに保存" aria-label="ファイルに保存">
-    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-      <path d="M4 3h13l4 4v13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-      <path d="M7 3v6h9V3" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-      <path d="M13 5v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-      <rect x="7" y="13" width="10" height="8" fill="none" stroke="currentColor" stroke-width="2"/>
-    </svg>
-  </button>
+  <!-- 保存ボタン：ファイルの保存・開く・書き出しをまとめたメニューを開く -->
+  <div class="menu">
+    <button class="save-button" id="saveButton" title="保存・書き出し" aria-label="保存・書き出し" aria-haspopup="true" aria-expanded="false">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+        <path d="M4 3h13l4 4v13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+        <path d="M7 3v6h9V3" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+        <path d="M13 5v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        <rect x="7" y="13" width="10" height="8" fill="none" stroke="currentColor" stroke-width="2"/>
+      </svg>
+      <span class="caret" aria-hidden="true">▾</span>
+    </button>
+    <div class="menu-list" id="saveList" role="menu">
+      <button role="menuitem" id="saveDataFile">ファイルに保存</button>
+      <button role="menuitem" id="openDataFile">ファイルを開く</button>
+      <div class="menu-separator"></div>
+      <button role="menuitem" id="exportPng">画像にエクスポート（PNG）</button>
+      <button role="menuitem" id="exportPdf">PDFにエクスポート（A4横）</button>
+      <button role="menuitem" id="exportPptx">PowerPointにエクスポート（.pptx）</button>
+    </div>
+  </div>
   <div class="menu">
     <button class="primary" id="menuButton" aria-haspopup="true" aria-expanded="false">メニュー ▾</button>
     <div class="menu-list" id="menuList" role="menu">
       <div class="menu-heading">配色</div>
       <div id="themeItems"></div>
-      <div class="menu-separator"></div>
-      <button role="menuitem" id="exportPng">画像にエクスポート（PNG）</button>
-      <button role="menuitem" id="exportPdf">PDFにエクスポート（A4横）</button>
-      <button role="menuitem" id="exportPptx">PowerPointにエクスポート（.pptx）</button>
-      <div class="menu-separator"></div>
-      <button role="menuitem" id="saveDataFile">ファイルに保存</button>
-      <button role="menuitem" id="openDataFile">ファイルを開く</button>
       <div class="menu-separator"></div>
       <button role="menuitem" class="danger" id="reset">リセット</button>
       <div class="menu-separator"></div>
@@ -483,7 +489,7 @@ function updateSaveButton() {
   const button = document.getElementById("saveButton");
   const unsaved = hasUnsavedChanges();
   button.classList.toggle("unsaved", unsaved);
-  button.title = unsaved ? "ファイルに保存（保存していない変更があります）" : "ファイルに保存";
+  button.title = unsaved ? "保存・書き出し（ファイルに保存していない変更があります）" : "保存・書き出し";
 }
 
 function hasUnsavedChanges() {
@@ -1820,30 +1826,43 @@ document.getElementById("exportPng").addEventListener("click", exportPng);
 document.getElementById("exportPdf").addEventListener("click", exportPdf);
 document.getElementById("exportPptx").addEventListener("click", exportPptx);
 document.getElementById("saveDataFile").addEventListener("click", saveDataFile);
-document.getElementById("saveButton").addEventListener("click", saveDataFile);
 document.getElementById("openDataFile").addEventListener("click", openDataFile);
 document.getElementById("reset").addEventListener("click", resetDiagram);
 
-// メニューの開け閉め
-function setMenuOpen(open) {
-  menuList.classList.toggle("show", open);
-  menuButton.setAttribute("aria-expanded", open ? "true" : "false");
+// プルダウンの開け閉め（保存ボタンとメニューの2つ。同時には1つだけ開く）
+const dropdowns = [
+  { button: document.getElementById("saveButton"), list: document.getElementById("saveList") },
+  { button: menuButton, list: menuList },
+];
+
+function setDropdownOpen(dropdown, open) {
+  dropdown.list.classList.toggle("show", open);
+  dropdown.button.setAttribute("aria-expanded", open ? "true" : "false");
 }
-menuButton.addEventListener("click", event => {
-  event.stopPropagation();
-  if (activeEditor) closeEditor(true);
-  setMenuOpen(!menuList.classList.contains("show"));
+
+function closeAllDropdowns() {
+  dropdowns.forEach(dropdown => setDropdownOpen(dropdown, false));
+}
+
+dropdowns.forEach(dropdown => {
+  dropdown.button.addEventListener("click", event => {
+    event.stopPropagation();
+    if (activeEditor) closeEditor(true);
+    const willOpen = !dropdown.list.classList.contains("show");
+    closeAllDropdowns();
+    setDropdownOpen(dropdown, willOpen);
+  });
+  // 項目を選んだら閉じる
+  dropdown.list.querySelectorAll("button, a").forEach(item => {
+    item.addEventListener("click", closeAllDropdowns);
+  });
 });
-// 項目を選んだら閉じる
-menuList.querySelectorAll("button, a").forEach(item => {
-  item.addEventListener("click", () => setMenuOpen(false));
-});
-// メニューの外をクリックするか Esc で閉じる
+// プルダウンの外をクリックするか Esc で閉じる
 document.addEventListener("click", event => {
-  if (!event.target.closest(".menu")) setMenuOpen(false);
+  if (!event.target.closest(".menu")) closeAllDropdowns();
 });
 document.addEventListener("keydown", event => {
-  if (event.key === "Escape") setMenuOpen(false);
+  if (event.key === "Escape") closeAllDropdowns();
 });
 
 
