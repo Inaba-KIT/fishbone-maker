@@ -58,6 +58,20 @@
   header h1 { font-size: 20px; margin: 0; color: var(--accent); }
   .hint { font-size: 14px; color: #555; margin-right: auto; }
   .title-short { display: none; }
+  /* 保存ボタン（フロッピーディスクの絵）。保存していない変更があるときは右上に点を出す */
+  .save-button { position: relative; display: flex; align-items: center; justify-content: center; padding: 7px 10px; }
+  .save-button svg { display: block; }
+  .save-button.unsaved::after {
+    content: "";
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #E8590C;
+    border: 2px solid #fff;
+  }
   @media (max-width: 760px) {
     .hint { display: none; }
     header h1 { margin-right: auto; }
@@ -69,6 +83,7 @@
     .title-full { display: none; }
     .title-short { display: inline; }
     #menuButton { padding: 7px 12px; white-space: nowrap; }
+    .save-button { padding: 6px 9px; }
     main { padding: 8px; }
     .preview { padding: 6px; border-radius: 8px; }
     .zoom-controls { right: 16px; bottom: 16px; }
@@ -101,6 +116,8 @@
   }
   .menu-list button:hover { background: var(--accent-light); }
   .menu-list button.danger { color: var(--danger); }
+  .menu-list .menu-link { display: block; padding: 10px 12px; border-radius: 6px; color: #222; text-decoration: none; font-size: 15px; }
+  .menu-list .menu-link:hover { background: var(--accent-light); }
   .menu-list button.danger:hover { background: #FBEAEA; }
   .menu-heading { font-size: 12px; color: #777; padding: 6px 12px 2px; }
   .menu-separator { height: 1px; background: var(--border); margin: 4px 6px; }
@@ -200,6 +217,8 @@
   }
   .file-name-row input:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
   .file-extension { color: #555; font-size: 15px; }
+  .option-row { display: flex; align-items: center; gap: 8px; margin: -4px 0 16px; font-size: 14px; cursor: pointer; }
+  .option-row input { width: 18px; height: 18px; margin: 0; flex: none; accent-color: var(--accent); }
 
   /* ===== 保存などの結果（画面下に一時的に出す） ===== */
   .status {
@@ -222,6 +241,14 @@
 <header>
   <h1><span class="title-full">フィッシュボーン図メーカー</span><span class="title-short">フィッシュボーン図</span></h1>
   <span class="hint">図の文字をクリックすると入力できます</span>
+  <button class="save-button" id="saveButton" title="ファイルに保存" aria-label="ファイルに保存">
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+      <path d="M4 3h13l4 4v13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+      <path d="M7 3v6h9V3" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+      <path d="M13 5v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <rect x="7" y="13" width="10" height="8" fill="none" stroke="currentColor" stroke-width="2"/>
+    </svg>
+  </button>
   <div class="menu">
     <button class="primary" id="menuButton" aria-haspopup="true" aria-expanded="false">メニュー ▾</button>
     <div class="menu-list" id="menuList" role="menu">
@@ -236,6 +263,9 @@
       <button role="menuitem" id="openDataFile">ファイルを開く</button>
       <div class="menu-separator"></div>
       <button role="menuitem" class="danger" id="reset">リセット</button>
+      <div class="menu-separator"></div>
+      <a role="menuitem" class="menu-link" id="helpLink" target="_blank" rel="noopener"
+         href="https://inaba-kit.github.io/fishbone-maker/%E4%BD%BF%E3%81%84%E6%96%B9.pdf">使い方（PDF）</a>
     </div>
   </div>
   <input type="file" id="fileInput" accept=".json,.txt,application/json,text/plain" hidden>
@@ -264,6 +294,10 @@
       <input type="text" id="fileNameInput" aria-label="ファイル名">
       <span class="file-extension" id="fileNameExtension">.png</span>
     </div>
+    <label class="option-row" id="pruneRow">
+      <input type="checkbox" id="pruneCheck">
+      <span>使っていない骨を消して書き出す</span>
+    </label>
     <div class="modal-buttons">
       <button id="fileNameCancel">キャンセル</button>
       <button class="primary" id="fileNameOk">保存</button>
@@ -435,6 +469,27 @@ function saveToBrowser() {
 
 let data = loadFromBrowser();
 
+// 「ファイルに保存」していない変更があるかどうかを調べるための控え。
+// ページを開いたとき・ファイルに保存したとき・ファイルを開いたとき・リセットしたときの内容を覚えておく
+let savedSnapshot = JSON.stringify(data);
+
+function markSaved() {
+  savedSnapshot = JSON.stringify(data);
+  updateSaveButton();
+}
+
+// 保存ボタンの点（保存していない変更があるときだけ出す）
+function updateSaveButton() {
+  const button = document.getElementById("saveButton");
+  const unsaved = hasUnsavedChanges();
+  button.classList.toggle("unsaved", unsaved);
+  button.title = unsaved ? "ファイルに保存（保存していない変更があります）" : "ファイルに保存";
+}
+
+function hasUnsavedChanges() {
+  return JSON.stringify(data) !== savedSnapshot;
+}
+
 function currentTheme() {
   return THEMES[data.theme] || THEMES[DEFAULT_THEME];
 }
@@ -443,6 +498,7 @@ function currentTheme() {
 function saveAndRender() {
   saveToBrowser();
   renderPreview();
+  updateSaveButton();
 }
 
 
@@ -1107,11 +1163,16 @@ let lastFileBaseName = null;
 
 const fileNameBack = document.getElementById("fileNameBack");
 const fileNameInput = document.getElementById("fileNameInput");
+const pruneRow = document.getElementById("pruneRow");
+const pruneCheck = document.getElementById("pruneCheck");
 let fileNameResolve = null;
 
 // ファイル名を聞く。決まったら「名前.拡張子」、キャンセルなら null を返す
-function askFileName(extension) {
+// offerPrune が true で、使っていない骨があるときは「使っていない骨を消して書き出す」の選択も出す
+function askFileName(extension, offerPrune = false) {
   document.getElementById("fileNameExtension").textContent = `.${extension}`;
+  pruneRow.style.display = offerPrune && hasUnusedBones() ? "" : "none";
+  pruneCheck.checked = pruneOnExport;
   fileNameInput.value = lastFileBaseName || defaultFileBaseName();
   fileNameBack.classList.add("show");
   fileNameInput.focus();
@@ -1127,6 +1188,7 @@ function finishFileName(ok) {
   if (ok) {
     baseName = cleanFileName(fileNameInput.value) || defaultFileBaseName();
     lastFileBaseName = baseName;
+    if (pruneRow.style.display !== "none") pruneOnExport = pruneCheck.checked;
   }
   fileNameBack.classList.remove("show");
   const resolve = fileNameResolve;
@@ -1148,16 +1210,21 @@ if (window.claude && typeof window.claude.use === "function") {
   window.claude.use("downloads").then(api => { claudeDownloads = api; }).catch(() => {});
 }
 
+// 保存できたら true、できなかった・キャンセルしたら false を返す
 async function downloadFile(fileName, blob) {
   if (claudeDownloads) {
     try {
       await claudeDownloads.save({ filename: fileName, data: blob });
       showStatus("保存しました");
+      return true;
     } catch (error) {
       showStatus(error && error.code === "declined" ? "保存をキャンセルしました" : "この画面では保存できませんでした");
+      return false;
     }
-    return;
   }
+  // ダウンロードが始まるときに、ページを閉じるときの確認が出ないようにする
+  downloadStarting = true;
+  setTimeout(() => { downloadStarting = false; }, 1000);
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -1166,15 +1233,67 @@ async function downloadFile(fileName, blob) {
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return true;
 }
+
+// ページを閉じる・再読み込みするとき、ファイルに保存していない変更があればブラウザの確認を出す。
+// （確認の文面はブラウザが決めるもので、こちらでは変えられない）
+let downloadStarting = false;
+window.addEventListener("beforeunload", event => {
+  // 入力の途中なら、その文字もブラウザへの自動保存に入れておく
+  if (activeEditor) {
+    setValue(activeEditor.key, activeEditor.input.value);
+    saveToBrowser();
+  }
+  if (downloadStarting || !hasUnsavedChanges()) return;
+  event.preventDefault();
+  event.returnValue = "";
+});
 
 
 // ===== 10. 書き出し（PNG・PDF） =====
 
+// 書き出すときに、使っていない骨を消すかどうか（ページを開いている間だけ覚えておく）
+//   使っていない骨：文字が空の小骨と、名前も小骨もすべて空の大骨
+let pruneOnExport = true;
+
+// 使っていない骨を取り除いた、書き出し用のデータを作る（元のデータは変えない）。
+// 何も入力されていないときは null を返す（そのときは、そのまま書き出す）
+function createExportData() {
+  const bones = [];
+  data.bones.forEach((bone, boneIndex) => {
+    const smalls = bone.smalls.filter(small => small.trim() !== "");
+    const name = bone.name.trim();
+    if (name === "" && smalls.length === 0) return;
+    // 名前が空の大骨は、画面で見えているのと同じ「要因○」のままにする
+    bones.push({ name: name || `要因${boneIndex + 1}`, smalls: smalls });
+  });
+  if (bones.length === 0) return null;
+  return { head: data.head, theme: data.theme, bones: bones };
+}
+
+// 使っていない骨があるか（あるときだけ、消すかどうかの選択を出す）
+function hasUnusedBones() {
+  return createExportData() !== null &&
+    data.bones.some(bone => bone.smalls.some(small => small.trim() === ""));
+}
+
+// 書き出し用の図を描く。消す設定のときは、描いている間だけ書き出し用のデータに入れ替える
+function drawForExport(draw) {
+  const original = data;
+  const exportData = pruneOnExport ? createExportData() : null;
+  if (exportData) data = exportData;
+  try {
+    return draw();
+  } finally {
+    data = original;
+  }
+}
+
 // 図（ボタンなし）を画像としてキャンバスに描く
 function renderDiagramToCanvas(scale) {
   return new Promise((resolve, reject) => {
-    const svg = buildSvg(false);
+    const svg = drawForExport(() => buildSvg(false));
     const width = Number(svg.getAttribute("width"));
     const height = Number(svg.getAttribute("height"));
     const image = new Image();
@@ -1199,7 +1318,7 @@ function canvasToBlob(canvas, type, quality) {
 
 async function exportPng() {
   if (activeEditor) closeEditor(true);
-  const fileName = await askFileName("png");
+  const fileName = await askFileName("png", true);
   if (!fileName) return;
   try {
     const canvas = await renderDiagramToCanvas(2);
@@ -1211,7 +1330,7 @@ async function exportPng() {
 
 async function exportPdf() {
   if (activeEditor) closeEditor(true);
-  const fileName = await askFileName("pdf");
+  const fileName = await askFileName("pdf", true);
   if (!fileName) return;
   try {
     const canvas = await renderDiagramToCanvas(3); // 印刷してもきれいなように高めの解像度で
@@ -1283,15 +1402,18 @@ const EMU_PER_POINT = 12700;
 
 async function exportPptx() {
   if (activeEditor) closeEditor(true);
-  const fileName = await askFileName("pptx");
+  const fileName = await askFileName("pptx", true);
   if (!fileName) return;
   try {
     // 図を描きながら図形を記録する（画面には出さない）
-    shapeRecorder = [];
-    const layout = calculateLayout();
-    buildSvg(false);
-    const shapes = shapeRecorder;
-    shapeRecorder = null;
+    const { shapes, layout } = drawForExport(() => {
+      shapeRecorder = [];
+      const layout = calculateLayout();
+      buildSvg(false);
+      const shapes = shapeRecorder;
+      shapeRecorder = null;
+      return { shapes, layout };
+    });
 
     const files = buildPptxFiles(shapes, layout);
     downloadFile(fileName, createZip(files));
@@ -1607,7 +1729,8 @@ async function saveDataFile() {
     theme: data.theme,
     bones: data.bones
   };
-  downloadFile(fileName, new Blob([JSON.stringify(content, null, 2)], { type: "application/json" }));
+  const saved = await downloadFile(fileName, new Blob([JSON.stringify(content, null, 2)], { type: "application/json" }));
+  if (saved) markSaved();
 }
 
 const fileInput = document.getElementById("fileInput");
@@ -1635,6 +1758,7 @@ fileInput.addEventListener("change", () => {
     }
     askConfirm("今の図をファイルの内容に置き換えます。よろしいですか？", () => {
       data = loaded;
+      markSaved();
       updateThemeChecks();
       saveAndRender();
       showStatus(`「${file.name}」を開きました`);
@@ -1687,6 +1811,7 @@ function updateThemeChecks() {
 function resetDiagram() {
   askConfirm("入力した内容をすべて消して、最初の状態に戻しますか？", () => {
     data = createDefaultData(data.theme);
+    markSaved();
     saveAndRender();
   });
 }
@@ -1695,6 +1820,7 @@ document.getElementById("exportPng").addEventListener("click", exportPng);
 document.getElementById("exportPdf").addEventListener("click", exportPdf);
 document.getElementById("exportPptx").addEventListener("click", exportPptx);
 document.getElementById("saveDataFile").addEventListener("click", saveDataFile);
+document.getElementById("saveButton").addEventListener("click", saveDataFile);
 document.getElementById("openDataFile").addEventListener("click", openDataFile);
 document.getElementById("reset").addEventListener("click", resetDiagram);
 
@@ -1709,7 +1835,7 @@ menuButton.addEventListener("click", event => {
   setMenuOpen(!menuList.classList.contains("show"));
 });
 // 項目を選んだら閉じる
-menuList.querySelectorAll("button").forEach(item => {
+menuList.querySelectorAll("button, a").forEach(item => {
   item.addEventListener("click", () => setMenuOpen(false));
 });
 // メニューの外をクリックするか Esc で閉じる
