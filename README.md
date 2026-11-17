@@ -2,6 +2,7 @@
 
 ブラウザだけで使えるフィッシュボーン図（特性要因図）の作成ツールです。
 サーバーやインストールは不要で、`index.html` 1つで動きます。
+おためし　https://inaba-kit.github.io/fishbone-maker/
 
 ---
 
