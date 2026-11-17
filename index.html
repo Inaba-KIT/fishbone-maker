@@ -189,7 +189,6 @@
   }
   .zoom-controls button { border: none; padding: 4px 10px; font-size: 14px; border-radius: 999px; }
   .zoom-controls .icon-only { display: flex; align-items: center; justify-content: center; padding: 6px 9px; }
-  .zoom-value { font-size: 13px; color: #555; min-width: 44px; text-align: center; }
 
   /* ===== 確認画面 ===== */
   .modal-back {
@@ -285,7 +284,6 @@
   </section>
   <div class="zoom-controls">
     <button id="zoomOut" title="縮小">−</button>
-    <span class="zoom-value" id="zoomValue">100%</span>
     <button id="zoomIn" title="拡大">＋</button>
     <button id="zoomFit" class="icon-only" title="画面に合わせる" aria-label="画面に合わせる">
       <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
@@ -430,7 +428,6 @@ const FIT_ZOOM_FLOOR = isTouchDevice ? 0.8 : MIN_FIT_ZOOM;
 const previewElement = document.getElementById("preview");
 const canvasElement = document.getElementById("canvas");
 const saveButton = document.getElementById("saveButton");
-const zoomValueElement = document.getElementById("zoomValue");
 const statusElement = document.getElementById("status");
 
 
@@ -919,7 +916,6 @@ function applyZoom(svg) {
   if (fitMode) zoom = calculateFitZoom(width, height);
   svg.style.width = `${width * zoom}px`;
   svg.style.height = `${height * zoom}px`;
-  zoomValueElement.textContent = `${Math.round(zoom * 100)}%`;
   const overflowing = previewElement.scrollWidth > previewElement.clientWidth ||
                       previewElement.scrollHeight > previewElement.clientHeight;
   previewElement.classList.toggle("can-pan", overflowing);
