@@ -344,6 +344,7 @@
 const MIN_BONES = 2;
 const MAX_BONES = 10;
 const MAX_SMALLS = 6;
+const MAX_TEXT_LENGTH = 200;   // 1か所に入れられる文字数（とても長い文字で動きが重くならないように）
 
 // ブラウザに自動保存するときの名前
 const STORAGE_KEY = "fishbone-maker-v1";
@@ -443,21 +444,31 @@ function createDefaultData(theme = DEFAULT_THEME) {
   };
 }
 
+// 用意した配色の名前か（"constructor" など、オブジェクトがもともと持つ名前は使わせない）
+function isThemeName(name) {
+  return typeof name === "string" && Object.prototype.hasOwnProperty.call(THEMES, name);
+}
+
+// 文字として使える形にする（文字以外は空、長すぎる分は切る）
+function cleanText(value) {
+  return typeof value === "string" ? value.slice(0, MAX_TEXT_LENGTH) : "";
+}
+
 // 読み込んだデータが正しい形か確かめて、使える形に整える（だめなら null）
 function sanitizeData(source) {
   if (!source || typeof source !== "object" || !Array.isArray(source.bones)) return null;
   const bones = source.bones.slice(0, MAX_BONES).map(bone => {
     if (!bone || typeof bone !== "object") return null;
-    const smalls = Array.isArray(bone.smalls) ? bone.smalls.slice(0, MAX_SMALLS).map(String) : [];
+    const smalls = Array.isArray(bone.smalls) ? bone.smalls.slice(0, MAX_SMALLS).map(cleanText) : [];
     return {
-      name: typeof bone.name === "string" ? bone.name : "",
+      name: cleanText(bone.name),
       smalls: smalls.length > 0 ? smalls : [""]
     };
   });
   if (bones.length < MIN_BONES || bones.includes(null)) return null;
   return {
-    head: typeof source.head === "string" ? source.head : "",
-    theme: THEMES[source.theme] ? source.theme : DEFAULT_THEME,
+    head: cleanText(source.head),
+    theme: isThemeName(source.theme) ? source.theme : DEFAULT_THEME,
     bones: bones
   };
 }
@@ -515,7 +526,7 @@ function isUnusedBone(bone) {
 }
 
 function currentTheme() {
-  return THEMES[data.theme] || THEMES[DEFAULT_THEME];
+  return isThemeName(data.theme) ? THEMES[data.theme] : THEMES[DEFAULT_THEME];
 }
 
 // データを変えたら必ずこれを呼ぶ：ブラウザに保存して、図を描き直す
@@ -1069,6 +1080,7 @@ function openEditor(key, autoAdded = false) {
   // 位置は図（canvas）の左上が基準なので、スクロールしても図と一緒に動く
   const input = document.createElement("input");
   input.type = "text";
+  input.maxLength = MAX_TEXT_LENGTH;
   input.className = "inline-editor";
   input.value = value;
   input.placeholder = key === "head" ? "問題（結果）" : key.startsWith("bone") ? "要因の名前" : "小要因";
@@ -1451,8 +1463,10 @@ async function exportPptx() {
   }
 }
 
+// XML に入れる文字を変換する。XML で使えない制御文字（タブ・改行以外）は取り除く
 function escapeXml(text) {
   return String(text)
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, "")
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;").replace(/'/g, "&apos;");
 }
@@ -1828,7 +1842,7 @@ for (const [themeKey, theme] of Object.entries(THEMES)) {
 
 // 今の配色にチェックを付ける
 function updateThemeChecks() {
-  const current = THEMES[data.theme] ? data.theme : DEFAULT_THEME;
+  const current = isThemeName(data.theme) ? data.theme : DEFAULT_THEME;
   themeItems.querySelectorAll(".theme-item").forEach(item => {
     const selected = item.dataset.theme === current;
     item.classList.toggle("selected", selected);
