@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="ブラウザだけで使えるフィッシュボーン図（特性要因図）作成ツール。図の文字をクリックして入力し、PNG・PDFで書き出せます。">
+<meta name="description" content="ブラウザだけで使えるフィッシュボーン図（特性要因図）作成ツール。図の文字をクリックして入力し、PNG・PDF・PowerPointで書き出せます。">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231F4E79'/%3E%3Cpath d='M5 16h18M9 8l5 8M9 24l5-8M15 8l5 8M15 24l5-8' stroke='white' stroke-width='2.4' stroke-linecap='round' fill='none'/%3E%3Cpath d='M22 11l6 5-6 5z' fill='white'/%3E%3C/svg%3E">
 <title>フィッシュボーン図メーカー</title>
 <style>
@@ -268,9 +268,11 @@
       <div class="menu-heading">配色</div>
       <div id="themeItems"></div>
       <div class="menu-separator"></div>
+      <button role="menuitem" id="removeUnused">使っていない骨を消す</button>
+      <div class="menu-separator"></div>
       <button role="menuitem" class="danger" id="reset">リセット</button>
       <div class="menu-separator"></div>
-      <a role="menuitem" class="menu-link" id="helpLink" target="_blank" rel="noopener"
+      <a role="menuitem" class="menu-link" target="_blank" rel="noopener"
          href="https://inaba-kit.github.io/fishbone-maker/%E4%BD%BF%E3%81%84%E6%96%B9.pdf">使い方（PDF）</a>
     </div>
   </div>
@@ -351,6 +353,9 @@ const SAVE_FILE_TYPE = "fishbone-maker";
 // 図の文字と色
 const FONT = '"Meiryo UI", "Meiryo", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif';
 const LINE_COLOR = "#333333";
+const SPINE_WIDTH = 8;        // 中央の骨（背骨）の線の太さ
+const ARROW_LENGTH = 28;      // 背骨の先の矢印の長さ
+const ARROW_HALF_WIDTH = 13;  // 矢印の幅の半分
 const DANGER_COLOR = "#B3261E";
 const PLACEHOLDER_COLOR = "#A8B4C0";
 
@@ -373,6 +378,7 @@ const END_GAP = 76;             // 大骨の名前の枠の近くは「＋」ボ
 const SMALL_TEXT_HEIGHT = 38;   // 小骨の文字をクリックできる範囲の高さ
 const MIN_BONE_HEIGHT = 190;    // 大骨の縦の長さ（最小）
 const BONE_LEAN = 0.6;          // 大骨の傾き（横の長さ ÷ 縦の長さ）
+const BONE_OVERLAP = 8;         // 大骨の線を名前の枠の中まで延ばす長さ（すき間なくつなげるため）
 const COLUMN_GAP = SMALL_LENGTH + 60;  // 大骨どうしの横の間隔
 const LABEL_WIDTH = 176;        // 大骨の名前の枠の幅（15pxの太字で1行10文字・2行で20文字ほど）
 const LABEL_ROOM = 64;          // 大骨の名前の枠のために上下に空けておく高さ
@@ -422,6 +428,9 @@ const FIT_ZOOM_FLOOR = isTouchDevice ? 0.8 : MIN_FIT_ZOOM;
 // 画面の部品
 const previewElement = document.getElementById("preview");
 const canvasElement = document.getElementById("canvas");
+const saveButton = document.getElementById("saveButton");
+const zoomValueElement = document.getElementById("zoomValue");
+const statusElement = document.getElementById("status");
 
 
 // ===== 2. データ =====
@@ -486,14 +495,23 @@ function markSaved() {
 
 // 保存ボタンの点（保存していない変更があるときだけ出す）
 function updateSaveButton() {
-  const button = document.getElementById("saveButton");
   const unsaved = hasUnsavedChanges();
-  button.classList.toggle("unsaved", unsaved);
-  button.title = unsaved ? "保存・書き出し（ファイルに保存していない変更があります）" : "保存・書き出し";
+  saveButton.classList.toggle("unsaved", unsaved);
+  saveButton.title = unsaved ? "保存・書き出し（ファイルに保存していない変更があります）" : "保存・書き出し";
 }
 
 function hasUnsavedChanges() {
   return JSON.stringify(data) !== savedSnapshot;
+}
+
+// 文字が入っている小骨だけを返す
+function usedSmalls(bone) {
+  return bone.smalls.filter(small => small.trim() !== "");
+}
+
+// 使っていない大骨か（名前も小骨もすべて空）
+function isUnusedBone(bone) {
+  return bone.name.trim() === "" && usedSmalls(bone).length === 0;
 }
 
 function currentTheme() {
@@ -592,10 +610,9 @@ function addRoundButton(parent, x, y, radius, symbol, color, title, onClick) {
   group.appendChild(svgElement("circle", { cx: x, cy: y, r: radius + BUTTON_HIT_MARGIN, fill: "transparent" }));
 
   const half = radius * 0.5;
-  const strokes = [[-half, 0, half, 0]];                     // 横棒（−）
-  if (symbol === "plus") strokes.push([0, -half, 0, half]);  // 縦棒を足して＋
-  const rotate = symbol === "cross" ? `rotate(45 ${x} ${y})` : "";
-  if (symbol === "cross") strokes.push([0, -half, 0, half]); // ＋を45度回して×
+  const strokes = [[-half, 0, half, 0]];                         // 横棒（−）
+  if (symbol !== "minus") strokes.push([0, -half, 0, half]);     // 縦棒を足して＋
+  const rotate = symbol === "cross" ? `rotate(45 ${x} ${y})` : ""; // ＋を45度回して×
   for (const [x1, y1, x2, y2] of strokes) {
     group.appendChild(svgElement("line", {
       x1: x + x1, y1: y + y1, x2: x + x2, y2: y + y2,
@@ -689,14 +706,15 @@ function drawSpineAndHead(svg, layout, theme, editMode) {
   const { headX, spineY } = layout;
 
   svg.appendChild(svgElement("line", {
-    x1: PADDING, y1: spineY, x2: headX - 14, y2: spineY,
-    stroke: LINE_COLOR, "stroke-width": 5
+    x1: PADDING, y1: spineY, x2: headX - ARROW_LENGTH + 4, y2: spineY,
+    stroke: LINE_COLOR, "stroke-width": SPINE_WIDTH
   }));
+  const arrowBaseX = headX - 2 - ARROW_LENGTH;
   svg.appendChild(svgElement("polygon", {
-    points: `${headX - 2},${spineY} ${headX - 20},${spineY - 9} ${headX - 20},${spineY + 9}`,
+    points: `${headX - 2},${spineY} ${arrowBaseX},${spineY - ARROW_HALF_WIDTH} ${arrowBaseX},${spineY + ARROW_HALF_WIDTH}`,
     fill: LINE_COLOR
   }));
-  recordShape({ type: "line", x1: PADDING, y1: spineY, x2: headX - 2, y2: spineY, width: 5, color: LINE_COLOR, arrowEnd: true, group: null });
+  recordShape({ type: "line", x1: PADDING, y1: spineY, x2: headX - 2, y2: spineY, width: SPINE_WIDTH, color: LINE_COLOR, arrowEnd: true, group: null });
 
   const head = fitText(data.head.trim() || "問題（結果）", HEAD_FONT_STEPS, true, HEAD_WIDTH - 28);
   const headHeight = Math.max(110, head.lines.length * head.lineHeight + 34);
@@ -751,18 +769,23 @@ function drawBone(svg, layout, theme, editMode, bone, boneIndex) {
   const endX = attachX - boneLean;                     // 名前の枠側の端
   const endY = spineY + direction * boneHeight;
 
+  // 大骨の線。名前の枠とすき間なくつながるよう、枠の中まで少し延ばす（はみ出た分は枠で隠れる）
+  const overlap = 1 + BONE_OVERLAP / boneHeight;
+  const lineEndX = attachX - boneLean * overlap;
+  const lineEndY = spineY + direction * boneHeight * overlap;
   svg.appendChild(svgElement("line", {
-    x1: endX, y1: endY, x2: attachX, y2: spineY,
+    x1: lineEndX, y1: lineEndY, x2: attachX, y2: spineY,
     stroke: LINE_COLOR, "stroke-width": 3
   }));
-  const groupName = `要因${boneIndex + 1}`;
-  recordShape({ type: "line", x1: endX, y1: endY, x2: attachX, y2: spineY, width: 3, color: LINE_COLOR, group: groupName });
+  const defaultName = `要因${boneIndex + 1}`;
+  recordShape({ type: "line", x1: lineEndX, y1: lineEndY, x2: attachX, y2: spineY, width: 3, color: LINE_COLOR, group: defaultName });
 
-  // 名前の枠
-  const label = fitText(bone.name.trim() || `要因${boneIndex + 1}`, LABEL_FONT_STEPS, true, LABEL_WIDTH - 20);
+  // 名前の枠（大骨の端に接して置く）
+  const labelText = bone.name.trim() || defaultName;
+  const label = fitText(labelText, LABEL_FONT_STEPS, true, LABEL_WIDTH - 20);
   const labelHeight = label.lines.length * label.lineHeight + 18;
   const labelX = endX - LABEL_WIDTH / 2;
-  const labelY = isTop ? endY - labelHeight - 4 : endY + 4;
+  const labelY = isTop ? endY - labelHeight : endY;
   svg.appendChild(svgElement("rect", {
     x: labelX, y: labelY, width: LABEL_WIDTH, height: labelHeight,
     rx: 8, fill: "#FFFFFF", stroke: theme.accent, "stroke-width": 2
@@ -770,7 +793,7 @@ function drawBone(svg, layout, theme, editMode, bone, boneIndex) {
   recordShape({
     type: "box", x: labelX, y: labelY, w: LABEL_WIDTH, h: labelHeight,
     fill: "#FFFFFF", stroke: theme.accent, strokeWidth: 2,
-    text: bone.name.trim() || `要因${boneIndex + 1}`, fontSize: label.size, bold: true, textColor: theme.accent, group: groupName
+    text: labelText, fontSize: label.size, bold: true, textColor: theme.accent, group: defaultName
   });
   addTextLines(svg, label.lines, endX, labelY + 9 + label.size - 1, label.lineHeight,
     { size: label.size, bold: true, color: theme.accent, anchor: "middle" });
@@ -790,8 +813,7 @@ function drawBone(svg, layout, theme, editMode, bone, boneIndex) {
     // 大骨を消す「×」：名前の枠の右上
     if (data.bones.length > MIN_BONES) {
       addRoundButton(svg, labelX + LABEL_WIDTH - 2, labelY + 2, 8, "cross", DANGER_COLOR, "この大骨を削除", () => {
-        const name = bone.name.trim() || `要因${boneIndex + 1}`;
-        askConfirm(`大骨「${name}」と、その小骨をすべて削除しますか？`, () => {
+        askConfirm(`大骨「${labelText}」と、その小骨をすべて削除しますか？`, () => {
           data.bones.splice(boneIndex, 1);
           saveAndRender();
         });
@@ -814,7 +836,7 @@ function drawBone(svg, layout, theme, editMode, bone, boneIndex) {
       x1: lineStartX, y1: pointY, x2: pointX, y2: pointY,
       stroke: LINE_COLOR, "stroke-width": 1.6
     }));
-    recordShape({ type: "line", x1: lineStartX, y1: pointY, x2: pointX, y2: pointY, width: 1.6, color: LINE_COLOR, group: groupName });
+    recordShape({ type: "line", x1: lineStartX, y1: pointY, x2: pointX, y2: pointY, width: 1.6, color: LINE_COLOR, group: defaultName });
 
     // 上側の大骨は、文字の右端に大骨の線が重ならないよう幅を狭める
     const textWidth = isTop ? SMALL_LENGTH - 40 : SMALL_LENGTH - 12;
@@ -826,7 +848,7 @@ function drawBone(svg, layout, theme, editMode, bone, boneIndex) {
       const textHeight = fitted.lines.length * fitted.lineHeight + 6;
       recordShape({
         type: "text", x: lineStartX, y: pointY - 2 - textHeight, w: textWidth, h: textHeight,
-        text: text, fontSize: fitted.size, color: LINE_COLOR, group: groupName
+        text: text, fontSize: fitted.size, color: LINE_COLOR, group: defaultName
       });
     } else if (editMode) {
       addTextLines(svg, [isTouchDevice ? "タップして入力" : "クリックして入力"], lineStartX, pointY - 6, 0,
@@ -886,7 +908,7 @@ function applyZoom(svg) {
   if (fitMode) zoom = calculateFitZoom(width, height);
   svg.style.width = `${width * zoom}px`;
   svg.style.height = `${height * zoom}px`;
-  document.getElementById("zoomValue").textContent = `${Math.round(zoom * 100)}%`;
+  zoomValueElement.textContent = `${Math.round(zoom * 100)}%`;
   const overflowing = previewElement.scrollWidth > previewElement.clientWidth ||
                       previewElement.scrollHeight > previewElement.clientHeight;
   previewElement.classList.toggle("can-pan", overflowing);
@@ -1004,25 +1026,31 @@ window.addEventListener("resize", () => {
 // ===== 7. 図の上で直接入力する =====
 //  入力する場所は key で表す："head"（問題）・"bone-0"（要因1の名前）・"small-0-2"（要因1の3つ目の小骨）
 
-let activeEditor = null;   // 入力中のとき { input, key, autoAdded }
+let activeEditor = null;   // 入力中のとき { input, key, autoAdded, dataBefore }
+
+// key を { kind, boneIndex, smallIndex } に分ける（"head" のときは kind だけ）
+function parseKey(key) {
+  const [kind, boneIndex, smallIndex] = key.split("-");
+  return { kind, boneIndex: Number(boneIndex), smallIndex: Number(smallIndex) };
+}
 
 function getValue(key) {
   if (key === "head") return data.head;
-  const [kind, boneIndex, smallIndex] = key.split("-");
-  const bone = data.bones[Number(boneIndex)];
+  const { kind, boneIndex, smallIndex } = parseKey(key);
+  const bone = data.bones[boneIndex];
   if (!bone) return null;
   if (kind === "bone") return bone.name;
-  const value = bone.smalls[Number(smallIndex)];
+  const value = bone.smalls[smallIndex];
   return value === undefined ? null : value;
 }
 
 function setValue(key, value) {
   if (key === "head") { data.head = value; return; }
-  const [kind, boneIndex, smallIndex] = key.split("-");
-  const bone = data.bones[Number(boneIndex)];
+  const { kind, boneIndex, smallIndex } = parseKey(key);
+  const bone = data.bones[boneIndex];
   if (!bone) return;
   if (kind === "bone") bone.name = value;
-  else bone.smalls[Number(smallIndex)] = value;
+  else bone.smalls[smallIndex] = value;
 }
 
 function openEditor(key, autoAdded = false) {
@@ -1052,7 +1080,8 @@ function openEditor(key, autoAdded = false) {
   input.style.width = `${areaBox.width}px`;
   input.style.height = `${areaBox.height}px`;
   canvasElement.appendChild(input);
-  activeEditor = { input, key, autoAdded };
+  // 開いたときのデータを控えておき、閉じるときに変わっていなければ描き直さない
+  activeEditor = { input, key, autoAdded, dataBefore: JSON.stringify(data) };
 
   input.addEventListener("keydown", event => {
     if (event.isComposing || event.keyCode === 229) return; // 日本語の変換中は何もしない
@@ -1086,27 +1115,26 @@ function openEditor(key, autoAdded = false) {
 // commit が true なら入力内容を反映してから閉じる
 function closeEditor(commit) {
   if (!activeEditor) return;
-  const { input, key, autoAdded } = activeEditor;
+  const { input, key, autoAdded, dataBefore } = activeEditor;
   activeEditor = null;
   if (commit) setValue(key, input.value);
 
   // Enter で自動的に足した小骨が空のままなら消す
   const value = getValue(key);
   if (autoAdded && (value === null || value.trim() === "")) {
-    const [, boneIndex, smallIndex] = key.split("-");
-    const bone = data.bones[Number(boneIndex)];
-    if (bone && bone.smalls.length > 1) bone.smalls.splice(Number(smallIndex), 1);
+    const { boneIndex, smallIndex } = parseKey(key);
+    const bone = data.bones[boneIndex];
+    if (bone && bone.smalls.length > 1) bone.smalls.splice(smallIndex, 1);
   }
   input.remove();
-  saveAndRender();
+  if (JSON.stringify(data) !== dataBefore) saveAndRender();
 }
 
 // 小骨の入力中に Enter を押したときの次の行き先。最後の小骨なら小骨を1本足す
 function nextSmallTarget(key) {
-  const [kind, boneIndexText, smallIndexText] = key.split("-");
+  const { kind, boneIndex, smallIndex } = parseKey(key);
   if (kind !== "small") return null;
-  const boneIndex = Number(boneIndexText);
-  const nextIndex = Number(smallIndexText) + 1;
+  const nextIndex = smallIndex + 1;
   const bone = data.bones[boneIndex];
   if (nextIndex < bone.smalls.length) {
     return { key: `small-${boneIndex}-${nextIndex}`, autoAdded: false };
@@ -1143,11 +1171,12 @@ document.getElementById("confirmYes").addEventListener("click", () => {
 
 // ===== 9. メッセージ表示とダウンロード =====
 
+let statusTimer = null;
+
 function showStatus(message) {
-  const status = document.getElementById("status");
-  status.textContent = message;
-  clearTimeout(showStatus.timer);
-  showStatus.timer = setTimeout(() => { status.textContent = ""; }, 4000);
+  statusElement.textContent = message;
+  clearTimeout(statusTimer);
+  statusTimer = setTimeout(() => { statusElement.textContent = ""; }, 4000);
 }
 
 // ===== 9-2. ファイル名を決める画面 =====
@@ -1173,18 +1202,22 @@ const pruneRow = document.getElementById("pruneRow");
 const pruneCheck = document.getElementById("pruneCheck");
 let fileNameResolve = null;
 
-// ファイル名を聞く。決まったら「名前.拡張子」、キャンセルなら null を返す
-// offerPrune が true で、使っていない骨があるときは「使っていない骨を消して書き出す」の選択も出す
+// ファイル名を聞く。決まったら { fileName: "名前.拡張子", prune }、キャンセルなら null を返す。
+// offerPrune が true（PNG・PDF・PowerPoint の書き出し）のときは「使っていない骨を消して書き出す」の選択も出す。
+// 選択は毎回「消す」にチェックを入れた状態から始める。prune はその選択（選択を出さないときは false）
 function askFileName(extension, offerPrune = false) {
   document.getElementById("fileNameExtension").textContent = `.${extension}`;
-  pruneRow.style.display = offerPrune && hasUnusedBones() ? "" : "none";
-  pruneCheck.checked = pruneOnExport;
+  pruneRow.style.display = offerPrune ? "" : "none";
+  pruneCheck.checked = true;
   fileNameInput.value = lastFileBaseName || defaultFileBaseName();
   fileNameBack.classList.add("show");
   fileNameInput.focus();
   fileNameInput.select();
   return new Promise(resolve => {
-    fileNameResolve = baseName => resolve(baseName === null ? null : `${baseName}.${extension}`);
+    fileNameResolve = baseName => resolve(baseName === null ? null : {
+      fileName: `${baseName}.${extension}`,
+      prune: offerPrune && pruneCheck.checked
+    });
   });
 }
 
@@ -1194,7 +1227,6 @@ function finishFileName(ok) {
   if (ok) {
     baseName = cleanFileName(fileNameInput.value) || defaultFileBaseName();
     lastFileBaseName = baseName;
-    if (pruneRow.style.display !== "none") pruneOnExport = pruneCheck.checked;
   }
   fileNameBack.classList.remove("show");
   const resolve = fileNameResolve;
@@ -1216,6 +1248,9 @@ if (window.claude && typeof window.claude.use === "function") {
   window.claude.use("downloads").then(api => { claudeDownloads = api; }).catch(() => {});
 }
 
+// ダウンロードが始まる瞬間は、ページを閉じるときの確認を出さない（ブラウザによっては確認が出てしまうため）
+let downloadStarting = false;
+
 // 保存できたら true、できなかった・キャンセルしたら false を返す
 async function downloadFile(fileName, blob) {
   if (claudeDownloads) {
@@ -1228,7 +1263,6 @@ async function downloadFile(fileName, blob) {
       return false;
     }
   }
-  // ダウンロードが始まるときに、ページを閉じるときの確認が出ないようにする
   downloadStarting = true;
   setTimeout(() => { downloadStarting = false; }, 1000);
   const url = URL.createObjectURL(blob);
@@ -1244,7 +1278,6 @@ async function downloadFile(fileName, blob) {
 
 // ページを閉じる・再読み込みするとき、ファイルに保存していない変更があればブラウザの確認を出す。
 // （確認の文面はブラウザが決めるもので、こちらでは変えられない）
-let downloadStarting = false;
 window.addEventListener("beforeunload", event => {
   // 入力の途中なら、その文字もブラウザへの自動保存に入れておく
   if (activeEditor) {
@@ -1259,35 +1292,24 @@ window.addEventListener("beforeunload", event => {
 
 // ===== 10. 書き出し（PNG・PDF） =====
 
-// 書き出すときに、使っていない骨を消すかどうか（ページを開いている間だけ覚えておく）
-//   使っていない骨：文字が空の小骨と、名前も小骨もすべて空の大骨
-let pruneOnExport = true;
-
-// 使っていない骨を取り除いた、書き出し用のデータを作る（元のデータは変えない）。
+// 使っていない骨（文字が空の小骨と、名前も小骨もすべて空の大骨）を取り除いた、
+// 書き出し用のデータを作る（元のデータは変えない）。
 // 何も入力されていないときは null を返す（そのときは、そのまま書き出す）
 function createExportData() {
   const bones = [];
   data.bones.forEach((bone, boneIndex) => {
-    const smalls = bone.smalls.filter(small => small.trim() !== "");
-    const name = bone.name.trim();
-    if (name === "" && smalls.length === 0) return;
+    if (isUnusedBone(bone)) return;
     // 名前が空の大骨は、画面で見えているのと同じ「要因○」のままにする
-    bones.push({ name: name || `要因${boneIndex + 1}`, smalls: smalls });
+    bones.push({ name: bone.name.trim() || `要因${boneIndex + 1}`, smalls: usedSmalls(bone) });
   });
   if (bones.length === 0) return null;
   return { head: data.head, theme: data.theme, bones: bones };
 }
 
-// 使っていない骨があるか（あるときだけ、消すかどうかの選択を出す）
-function hasUnusedBones() {
-  return createExportData() !== null &&
-    data.bones.some(bone => bone.smalls.some(small => small.trim() === ""));
-}
-
-// 書き出し用の図を描く。消す設定のときは、描いている間だけ書き出し用のデータに入れ替える
-function drawForExport(draw) {
+// 書き出し用の図を描く。prune が true のときは、描いている間だけ書き出し用のデータに入れ替える
+function drawForExport(prune, draw) {
   const original = data;
-  const exportData = pruneOnExport ? createExportData() : null;
+  const exportData = prune ? createExportData() : null;
   if (exportData) data = exportData;
   try {
     return draw();
@@ -1297,9 +1319,9 @@ function drawForExport(draw) {
 }
 
 // 図（ボタンなし）を画像としてキャンバスに描く
-function renderDiagramToCanvas(scale) {
+function renderDiagramToCanvas(scale, prune) {
   return new Promise((resolve, reject) => {
-    const svg = drawForExport(() => buildSvg(false));
+    const svg = drawForExport(prune, () => buildSvg(false));
     const width = Number(svg.getAttribute("width"));
     const height = Number(svg.getAttribute("height"));
     const image = new Image();
@@ -1324,11 +1346,11 @@ function canvasToBlob(canvas, type, quality) {
 
 async function exportPng() {
   if (activeEditor) closeEditor(true);
-  const fileName = await askFileName("png", true);
-  if (!fileName) return;
+  const choice = await askFileName("png", true);
+  if (!choice) return;
   try {
-    const canvas = await renderDiagramToCanvas(2);
-    downloadFile(fileName, await canvasToBlob(canvas, "image/png"));
+    const canvas = await renderDiagramToCanvas(2, choice.prune);
+    downloadFile(choice.fileName, await canvasToBlob(canvas, "image/png"));
   } catch (error) {
     showStatus("PNGを作れませんでした");
   }
@@ -1336,13 +1358,13 @@ async function exportPng() {
 
 async function exportPdf() {
   if (activeEditor) closeEditor(true);
-  const fileName = await askFileName("pdf", true);
-  if (!fileName) return;
+  const choice = await askFileName("pdf", true);
+  if (!choice) return;
   try {
-    const canvas = await renderDiagramToCanvas(3); // 印刷してもきれいなように高めの解像度で
+    const canvas = await renderDiagramToCanvas(3, choice.prune); // 印刷してもきれいなように高めの解像度で
     const jpeg = await canvasToBlob(canvas, "image/jpeg", 0.92);
     const jpegBytes = new Uint8Array(await jpeg.arrayBuffer());
-    downloadFile(fileName, buildPdf(jpegBytes, canvas.width, canvas.height));
+    downloadFile(choice.fileName, buildPdf(jpegBytes, canvas.width, canvas.height));
   } catch (error) {
     showStatus("PDFを作れませんでした");
   }
@@ -1408,11 +1430,11 @@ const EMU_PER_POINT = 12700;
 
 async function exportPptx() {
   if (activeEditor) closeEditor(true);
-  const fileName = await askFileName("pptx", true);
-  if (!fileName) return;
+  const choice = await askFileName("pptx", true);
+  if (!choice) return;
   try {
     // 図を描きながら図形を記録する（画面には出さない）
-    const { shapes, layout } = drawForExport(() => {
+    const { shapes, layout } = drawForExport(choice.prune, () => {
       shapeRecorder = [];
       const layout = calculateLayout();
       buildSvg(false);
@@ -1422,7 +1444,7 @@ async function exportPptx() {
     });
 
     const files = buildPptxFiles(shapes, layout);
-    downloadFile(fileName, createZip(files));
+    downloadFile(choice.fileName, createZip(files));
   } catch (error) {
     shapeRecorder = null;
     showStatus("PowerPointファイルを作れませんでした");
@@ -1725,8 +1747,8 @@ function createZip(files) {
 
 async function saveDataFile() {
   if (activeEditor) closeEditor(true);
-  const fileName = await askFileName("json");
-  if (!fileName) return;
+  const choice = await askFileName("json");
+  if (!choice) return;
   const content = {
     type: SAVE_FILE_TYPE,
     version: 1,
@@ -1735,7 +1757,7 @@ async function saveDataFile() {
     theme: data.theme,
     bones: data.bones
   };
-  const saved = await downloadFile(fileName, new Blob([JSON.stringify(content, null, 2)], { type: "application/json" }));
+  const saved = await downloadFile(choice.fileName, new Blob([JSON.stringify(content, null, 2)], { type: "application/json" }));
   if (saved) markSaved();
 }
 
@@ -1827,11 +1849,56 @@ document.getElementById("exportPdf").addEventListener("click", exportPdf);
 document.getElementById("exportPptx").addEventListener("click", exportPptx);
 document.getElementById("saveDataFile").addEventListener("click", saveDataFile);
 document.getElementById("openDataFile").addEventListener("click", openDataFile);
+// 使っていない骨（空の小骨と、名前も小骨も空の大骨）を、画面の図とデータから消す。
+// 大骨は2本、小骨は大骨1本につき1本を下回らないようにする
+function removeUnusedBones() {
+  if (activeEditor) closeEditor(true);
+  // 何も書いていないときは、消すと最初の図と同じになるので何もしない
+  if (data.bones.every(isUnusedBone)) {
+    showStatus("使っていない骨はありません");
+    return;
+  }
+
+  // 残す大骨を決める。2本を下回るときは、尻尾側（番号の大きいほう）の空の大骨を残す
+  const keepBone = data.bones.map(bone => !isUnusedBone(bone));
+  for (let i = data.bones.length - 1; i >= 0 && keepBone.filter(Boolean).length < MIN_BONES; i--) {
+    keepBone[i] = true;
+  }
+
+  let removedBoneCount = 0;
+  let removedSmallCount = 0;
+  const newBones = [];
+  data.bones.forEach((bone, boneIndex) => {
+    if (!keepBone[boneIndex]) {
+      removedBoneCount++;
+      return;
+    }
+    // 小骨がすべて空なら、空の小骨を1本だけ残す
+    const filled = usedSmalls(bone);
+    const smalls = filled.length > 0 ? filled : [""];
+    removedSmallCount += bone.smalls.length - smalls.length;
+    newBones.push({ name: bone.name, smalls: smalls });
+  });
+
+  if (removedBoneCount === 0 && removedSmallCount === 0) {
+    showStatus("使っていない骨はありません");
+    return;
+  }
+  const counts = [];
+  if (removedBoneCount > 0) counts.push(`大骨${removedBoneCount}本`);
+  if (removedSmallCount > 0) counts.push(`小骨${removedSmallCount}本`);
+  askConfirm(`使っていない骨（${counts.join("・")}）を削除しますか？`, () => {
+    data.bones = newBones;
+    saveAndRender();
+  });
+}
+
 document.getElementById("reset").addEventListener("click", resetDiagram);
+document.getElementById("removeUnused").addEventListener("click", removeUnusedBones);
 
 // プルダウンの開け閉め（保存ボタンとメニューの2つ。同時には1つだけ開く）
 const dropdowns = [
-  { button: document.getElementById("saveButton"), list: document.getElementById("saveList") },
+  { button: saveButton, list: document.getElementById("saveList") },
   { button: menuButton, list: menuList },
 ];
 
