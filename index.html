@@ -184,9 +184,22 @@
     z-index: 20;
   }
   .modal-back.show { display: flex; }
-  .modal { background: #fff; border-radius: 10px; padding: 20px; max-width: 380px; }
+  .modal { background: #fff; border-radius: 10px; padding: 20px; max-width: 380px; width: calc(100% - 32px); }
   .modal p { margin: 0 0 16px; line-height: 1.6; }
   .modal-buttons { display: flex; gap: 8px; justify-content: flex-end; }
+  .file-name-row { display: flex; align-items: center; gap: 6px; margin-bottom: 16px; }
+  .file-name-row input {
+    flex: 1;
+    min-width: 0;
+    font-family: var(--font);
+    font-size: 16px;   /* 16px以上にして、iPhoneで画面が勝手に拡大されるのを防ぐ */
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: #222;
+  }
+  .file-name-row input:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
+  .file-extension { color: #555; font-size: 15px; }
 
   /* ===== 保存などの結果（画面下に一時的に出す） ===== */
   .status {
@@ -217,6 +230,7 @@
       <div class="menu-separator"></div>
       <button role="menuitem" id="exportPng">画像にエクスポート（PNG）</button>
       <button role="menuitem" id="exportPdf">PDFにエクスポート（A4横）</button>
+      <button role="menuitem" id="exportPptx">PowerPointにエクスポート（.pptx）</button>
       <div class="menu-separator"></div>
       <button role="menuitem" id="saveDataFile">ファイルに保存</button>
       <button role="menuitem" id="openDataFile">ファイルを開く</button>
@@ -242,6 +256,20 @@
     </button>
   </div>
 </main>
+
+<div class="modal-back" id="fileNameBack">
+  <div class="modal" role="dialog" aria-labelledby="fileNameTitle">
+    <p id="fileNameTitle">ファイル名を決めてください</p>
+    <div class="file-name-row">
+      <input type="text" id="fileNameInput" aria-label="ファイル名">
+      <span class="file-extension" id="fileNameExtension">.png</span>
+    </div>
+    <div class="modal-buttons">
+      <button id="fileNameCancel">キャンセル</button>
+      <button class="primary" id="fileNameOk">保存</button>
+    </div>
+  </div>
+</div>
 
 <div class="modal-back" id="confirmBack">
   <div class="modal">
@@ -540,6 +568,18 @@ function addEditableArea(parent, key, x, y, width, height) {
 
 // ===== 5. 図を描く =====
 
+// PowerPoint書き出し用に、描いた図形を記録しておく仕組み。
+// shapeRecorder が配列のときだけ、図を描きながら図形の情報をそこに追加する
+//   { type: "line", x1, y1, x2, y2, width, color, arrowEnd, group }
+//   { type: "box",  x, y, w, h, fill, stroke, strokeWidth, text, fontSize, bold, textColor, group }
+//   { type: "text", x, y, w, h, text, fontSize, color, group }   （y は箱の上端。文字は箱の下に揃える）
+let shapeRecorder = null;
+
+function recordShape(shape) {
+  if (shapeRecorder) shapeRecorder.push(shape);
+}
+
+
 // 図全体の大きさと、背骨・各大骨の位置を計算する
 function calculateLayout() {
   const columnCount = Math.ceil(data.bones.length / 2);
@@ -594,6 +634,7 @@ function drawSpineAndHead(svg, layout, theme, editMode) {
     points: `${headX - 2},${spineY} ${headX - 20},${spineY - 9} ${headX - 20},${spineY + 9}`,
     fill: LINE_COLOR
   }));
+  recordShape({ type: "line", x1: PADDING, y1: spineY, x2: headX - 2, y2: spineY, width: 5, color: LINE_COLOR, arrowEnd: true, group: null });
 
   const head = fitText(data.head.trim() || "問題（結果）", HEAD_FONT_STEPS, true, HEAD_WIDTH - 28);
   const headHeight = Math.max(110, head.lines.length * head.lineHeight + 34);
@@ -602,6 +643,11 @@ function drawSpineAndHead(svg, layout, theme, editMode) {
     x: headX, y: headTop, width: HEAD_WIDTH, height: headHeight,
     rx: 14, fill: theme.headFill, stroke: theme.headStroke, "stroke-width": 2.5
   }));
+  recordShape({
+    type: "box", x: headX, y: headTop, w: HEAD_WIDTH, h: headHeight,
+    fill: theme.headFill, stroke: theme.headStroke, strokeWidth: 2.5,
+    text: data.head.trim() || "問題（結果）", fontSize: head.size, bold: true, textColor: theme.headText, group: null
+  });
   addTextLines(svg, head.lines, headX + HEAD_WIDTH / 2,
     spineY - (head.lines.length - 1) * head.lineHeight / 2 + head.size / 3, head.lineHeight,
     { size: head.size, bold: true, color: theme.headText, anchor: "middle" });
@@ -647,6 +693,8 @@ function drawBone(svg, layout, theme, editMode, bone, boneIndex) {
     x1: endX, y1: endY, x2: attachX, y2: spineY,
     stroke: LINE_COLOR, "stroke-width": 3
   }));
+  const groupName = `要因${boneIndex + 1}`;
+  recordShape({ type: "line", x1: endX, y1: endY, x2: attachX, y2: spineY, width: 3, color: LINE_COLOR, group: groupName });
 
   // 名前の枠
   const label = fitText(bone.name.trim() || `要因${boneIndex + 1}`, LABEL_FONT_STEPS, true, LABEL_WIDTH - 20);
@@ -657,6 +705,11 @@ function drawBone(svg, layout, theme, editMode, bone, boneIndex) {
     x: labelX, y: labelY, width: LABEL_WIDTH, height: labelHeight,
     rx: 8, fill: "#FFFFFF", stroke: theme.accent, "stroke-width": 2
   }));
+  recordShape({
+    type: "box", x: labelX, y: labelY, w: LABEL_WIDTH, h: labelHeight,
+    fill: "#FFFFFF", stroke: theme.accent, strokeWidth: 2,
+    text: bone.name.trim() || `要因${boneIndex + 1}`, fontSize: label.size, bold: true, textColor: theme.accent, group: groupName
+  });
   addTextLines(svg, label.lines, endX, labelY + 9 + label.size - 1, label.lineHeight,
     { size: label.size, bold: true, color: theme.accent, anchor: "middle" });
 
@@ -699,6 +752,7 @@ function drawBone(svg, layout, theme, editMode, bone, boneIndex) {
       x1: lineStartX, y1: pointY, x2: pointX, y2: pointY,
       stroke: LINE_COLOR, "stroke-width": 1.6
     }));
+    recordShape({ type: "line", x1: lineStartX, y1: pointY, x2: pointX, y2: pointY, width: 1.6, color: LINE_COLOR, group: groupName });
 
     // 上側の大骨は、文字の右端に大骨の線が重ならないよう幅を狭める
     const textWidth = isTop ? SMALL_LENGTH - 40 : SMALL_LENGTH - 12;
@@ -707,6 +761,11 @@ function drawBone(svg, layout, theme, editMode, bone, boneIndex) {
       const fitted = fitText(text, SMALL_FONT_STEPS, false, textWidth);
       addTextLines(svg, fitted.lines, lineStartX, pointY - 6 - (fitted.lines.length - 1) * fitted.lineHeight,
         fitted.lineHeight, { size: fitted.size, bold: false, color: LINE_COLOR });
+      const textHeight = fitted.lines.length * fitted.lineHeight + 6;
+      recordShape({
+        type: "text", x: lineStartX, y: pointY - 2 - textHeight, w: textWidth, h: textHeight,
+        text: text, fontSize: fitted.size, color: LINE_COLOR, group: groupName
+      });
     } else if (editMode) {
       addTextLines(svg, [isTouchDevice ? "タップして入力" : "クリックして入力"], lineStartX, pointY - 6, 0,
         { size: 13, bold: false, color: PLACEHOLDER_COLOR });
@@ -1029,11 +1088,59 @@ function showStatus(message) {
   showStatus.timer = setTimeout(() => { status.textContent = ""; }, 4000);
 }
 
-// ファイル名：「フィッシュボーン図_問題の文字.拡張子」
-function makeFileName(extension) {
-  const title = data.head.trim().replace(/[\\/:*?"<>|]/g, "").slice(0, 30);
-  return `フィッシュボーン図${title ? "_" + title : ""}.${extension}`;
+// ===== 9-2. ファイル名を決める画面 =====
+
+// ファイル名に使えない記号を取り除く
+function cleanFileName(name) {
+  return name.replace(/[\\/:*?"<>|\u0000-\u001F]/g, "").trim().slice(0, 80);
 }
+
+// 初回のファイル名：「フィッシュボーン図_問題の文字」
+function defaultFileBaseName() {
+  const title = cleanFileName(data.head).slice(0, 30);
+  return `フィッシュボーン図${title ? "_" + title : ""}`;
+}
+
+// 一度入れた名前は、ページを開いている間だけ覚えておく
+// （共用PCで次の人に前の人の名前が出ないよう、ブラウザには保存しない）
+let lastFileBaseName = null;
+
+const fileNameBack = document.getElementById("fileNameBack");
+const fileNameInput = document.getElementById("fileNameInput");
+let fileNameResolve = null;
+
+// ファイル名を聞く。決まったら「名前.拡張子」、キャンセルなら null を返す
+function askFileName(extension) {
+  document.getElementById("fileNameExtension").textContent = `.${extension}`;
+  fileNameInput.value = lastFileBaseName || defaultFileBaseName();
+  fileNameBack.classList.add("show");
+  fileNameInput.focus();
+  fileNameInput.select();
+  return new Promise(resolve => {
+    fileNameResolve = baseName => resolve(baseName === null ? null : `${baseName}.${extension}`);
+  });
+}
+
+function finishFileName(ok) {
+  if (!fileNameResolve) return;
+  let baseName = null;
+  if (ok) {
+    baseName = cleanFileName(fileNameInput.value) || defaultFileBaseName();
+    lastFileBaseName = baseName;
+  }
+  fileNameBack.classList.remove("show");
+  const resolve = fileNameResolve;
+  fileNameResolve = null;
+  resolve(baseName);
+}
+
+document.getElementById("fileNameOk").addEventListener("click", () => finishFileName(true));
+document.getElementById("fileNameCancel").addEventListener("click", () => finishFileName(false));
+fileNameInput.addEventListener("keydown", event => {
+  if (event.isComposing || event.keyCode === 229) return; // 日本語の変換中は何もしない
+  if (event.key === "Enter") { event.preventDefault(); finishFileName(true); }
+  if (event.key === "Escape") { event.preventDefault(); finishFileName(false); }
+});
 
 // Claude のページ上で開いたときは、その保存機能を使う（それ以外は普通のダウンロード）
 let claudeDownloads = null;
@@ -1092,9 +1199,11 @@ function canvasToBlob(canvas, type, quality) {
 
 async function exportPng() {
   if (activeEditor) closeEditor(true);
+  const fileName = await askFileName("png");
+  if (!fileName) return;
   try {
     const canvas = await renderDiagramToCanvas(2);
-    downloadFile(makeFileName("png"), await canvasToBlob(canvas, "image/png"));
+    downloadFile(fileName, await canvasToBlob(canvas, "image/png"));
   } catch (error) {
     showStatus("PNGを作れませんでした");
   }
@@ -1102,11 +1211,13 @@ async function exportPng() {
 
 async function exportPdf() {
   if (activeEditor) closeEditor(true);
+  const fileName = await askFileName("pdf");
+  if (!fileName) return;
   try {
     const canvas = await renderDiagramToCanvas(3); // 印刷してもきれいなように高めの解像度で
     const jpeg = await canvasToBlob(canvas, "image/jpeg", 0.92);
     const jpegBytes = new Uint8Array(await jpeg.arrayBuffer());
-    downloadFile(makeFileName("pdf"), buildPdf(jpegBytes, canvas.width, canvas.height));
+    downloadFile(fileName, buildPdf(jpegBytes, canvas.width, canvas.height));
   } catch (error) {
     showStatus("PDFを作れませんでした");
   }
@@ -1162,10 +1273,332 @@ function buildPdf(jpegBytes, imageWidth, imageHeight) {
 }
 
 
+// ===== 10-2. 書き出し（PowerPoint） =====
+//  外部ライブラリを使わず、PowerPointの図形（線・角丸の四角・テキストボックス）で1枚のスライドを作る。
+//  大骨ごとに、線・名前の枠・小骨をグループにまとめる
+
+const SLIDE = { width: 12192000, height: 6858000 };  // 16:9（単位はEMU。1インチ = 914400）
+const SLIDE_MARGIN = 274320;                          // 0.3インチ
+const EMU_PER_POINT = 12700;
+
+async function exportPptx() {
+  if (activeEditor) closeEditor(true);
+  const fileName = await askFileName("pptx");
+  if (!fileName) return;
+  try {
+    // 図を描きながら図形を記録する（画面には出さない）
+    shapeRecorder = [];
+    const layout = calculateLayout();
+    buildSvg(false);
+    const shapes = shapeRecorder;
+    shapeRecorder = null;
+
+    const files = buildPptxFiles(shapes, layout);
+    downloadFile(fileName, createZip(files));
+  } catch (error) {
+    shapeRecorder = null;
+    showStatus("PowerPointファイルを作れませんでした");
+  }
+}
+
+function escapeXml(text) {
+  return String(text)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+}
+
+function hexColor(color) {
+  return color.replace("#", "").toUpperCase();
+}
+
+// スライド1枚分の図形のXMLを作る
+function buildSlideXml(shapes, layout) {
+  // 図の座標（ピクセル）→ スライドの座標（EMU）
+  const scale = Math.min(
+    (SLIDE.width - SLIDE_MARGIN * 2) / layout.width,
+    (SLIDE.height - SLIDE_MARGIN * 2) / layout.height
+  );
+  const offsetX = (SLIDE.width - layout.width * scale) / 2;
+  const offsetY = (SLIDE.height - layout.height * scale) / 2;
+  const toX = x => Math.round(offsetX + x * scale);
+  const toY = y => Math.round(offsetY + y * scale);
+  const toLength = length => Math.round(length * scale);
+  // 文字の大きさ（1/100ポイント）。PowerPointは折り返しがブラウザと少し違うので、少しだけ小さめにする
+  const toFontSize = px => Math.max(600, Math.round(px * scale / EMU_PER_POINT * 0.95 * 100));
+
+  let nextId = 2;
+  const fontXml = '<a:latin typeface="Meiryo UI"/><a:ea typeface="Meiryo UI"/>';
+
+  // 図形1つの範囲（グループの大きさを計算するのに使う）
+  function shapeBox(shape) {
+    if (shape.type === "line") {
+      return {
+        left: toX(Math.min(shape.x1, shape.x2)), top: toY(Math.min(shape.y1, shape.y2)),
+        right: toX(Math.max(shape.x1, shape.x2)), bottom: toY(Math.max(shape.y1, shape.y2))
+      };
+    }
+    return { left: toX(shape.x), top: toY(shape.y), right: toX(shape.x + shape.w), bottom: toY(shape.y + shape.h) };
+  }
+
+  function lineXml(shape) {
+    const box = shapeBox(shape);
+    const flipH = shape.x2 < shape.x1 ? ' flipH="1"' : "";
+    const flipV = shape.y2 < shape.y1 ? ' flipV="1"' : "";
+    const arrow = shape.arrowEnd ? '<a:tailEnd type="triangle" w="med" len="med"/>' : "";
+    const id = nextId++;
+    return `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="線 ${id}"/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr>` +
+      `<p:spPr><a:xfrm${flipH}${flipV}><a:off x="${box.left}" y="${box.top}"/>` +
+      `<a:ext cx="${box.right - box.left}" cy="${box.bottom - box.top}"/></a:xfrm>` +
+      `<a:prstGeom prst="line"><a:avLst/></a:prstGeom>` +
+      `<a:ln w="${toLength(shape.width)}"><a:solidFill><a:srgbClr val="${hexColor(shape.color)}"/></a:solidFill>${arrow}</a:ln>` +
+      `</p:spPr></p:cxnSp>`;
+  }
+
+  function boxXml(shape) {
+    const box = shapeBox(shape);
+    const id = nextId++;
+    const line = shape.stroke === "none"
+      ? "<a:ln><a:noFill/></a:ln>"
+      : `<a:ln w="${toLength(shape.strokeWidth)}"><a:solidFill><a:srgbClr val="${hexColor(shape.stroke)}"/></a:solidFill></a:ln>`;
+    const inset = toLength(8);
+    return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${escapeXml(shape.text)}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
+      `<p:spPr><a:xfrm><a:off x="${box.left}" y="${box.top}"/><a:ext cx="${box.right - box.left}" cy="${box.bottom - box.top}"/></a:xfrm>` +
+      `<a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val 12000"/></a:avLst></a:prstGeom>` +
+      `<a:solidFill><a:srgbClr val="${hexColor(shape.fill)}"/></a:solidFill>${line}</p:spPr>` +
+      `<p:txBody><a:bodyPr wrap="square" lIns="${inset}" tIns="${inset}" rIns="${inset}" bIns="${inset}" anchor="ctr"><a:noAutofit/></a:bodyPr><a:lstStyle/>` +
+      `<a:p><a:pPr algn="ctr"/><a:r><a:rPr lang="ja-JP" sz="${toFontSize(shape.fontSize)}" b="${shape.bold ? 1 : 0}">` +
+      `<a:solidFill><a:srgbClr val="${hexColor(shape.textColor)}"/></a:solidFill>${fontXml}</a:rPr>` +
+      `<a:t>${escapeXml(shape.text)}</a:t></a:r></a:p></p:txBody></p:sp>`;
+  }
+
+  function textXml(shape) {
+    const box = shapeBox(shape);
+    const id = nextId++;
+    return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${escapeXml(shape.text)}"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>` +
+      `<p:spPr><a:xfrm><a:off x="${box.left}" y="${box.top}"/><a:ext cx="${box.right - box.left}" cy="${box.bottom - box.top}"/></a:xfrm>` +
+      `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr>` +
+      `<p:txBody><a:bodyPr wrap="square" lIns="0" tIns="0" rIns="0" bIns="0" anchor="b"><a:noAutofit/></a:bodyPr><a:lstStyle/>` +
+      `<a:p><a:r><a:rPr lang="ja-JP" sz="${toFontSize(shape.fontSize)}">` +
+      `<a:solidFill><a:srgbClr val="${hexColor(shape.color)}"/></a:solidFill>${fontXml}</a:rPr>` +
+      `<a:t>${escapeXml(shape.text)}</a:t></a:r></a:p></p:txBody></p:sp>`;
+  }
+
+  function shapeXml(shape) {
+    if (shape.type === "line") return lineXml(shape);
+    if (shape.type === "box") return boxXml(shape);
+    return textXml(shape);
+  }
+
+  // グループにまとめる（グループの位置と大きさは、中の図形全体を囲む範囲）
+  function groupXml(name, members) {
+    const boxes = members.map(shapeBox);
+    const left = Math.min(...boxes.map(b => b.left));
+    const top = Math.min(...boxes.map(b => b.top));
+    const width = Math.max(...boxes.map(b => b.right)) - left;
+    const height = Math.max(...boxes.map(b => b.bottom)) - top;
+    const id = nextId++;
+    return `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="${id}" name="${escapeXml(name)}"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+      `<p:grpSpPr><a:xfrm><a:off x="${left}" y="${top}"/><a:ext cx="${width}" cy="${height}"/>` +
+      `<a:chOff x="${left}" y="${top}"/><a:chExt cx="${width}" cy="${height}"/></a:xfrm></p:grpSpPr>` +
+      members.map(shapeXml).join("") + `</p:grpSp>`;
+  }
+
+  // グループのない図形（背骨・頭）はそのまま、ほかは大骨ごとにまとめる
+  let body = shapes.filter(shape => !shape.group).map(shapeXml).join("");
+  const groupNames = [...new Set(shapes.filter(shape => shape.group).map(shape => shape.group))];
+  for (const name of groupNames) {
+    body += groupXml(name, shapes.filter(shape => shape.group === name));
+  }
+
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" ` +
+    `xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ` +
+    `xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+    `<p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+    `<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>` +
+    body + `</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`;
+}
+
+// .pptx の中身（ファイル名 → 内容）を作る。スライド以外は決まった最小限の内容
+function buildPptxFiles(shapes, layout) {
+  const ns = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" ' +
+             'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ' +
+             'xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"';
+  const head = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+  const rel = (id, type, target) =>
+    `<Relationship Id="${id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${type}" Target="${target}"/>`;
+  const rels = items => head + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + items.join("") + '</Relationships>';
+  const emptyTree = '<p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>' +
+    '<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr></p:spTree>';
+  const now = new Date().toISOString().replace(/\.\d+Z$/, "Z");
+  const title = escapeXml(data.head.trim() || "フィッシュボーン図");
+
+  const fillStyles = '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>'.repeat(3);
+  const lineStyles = '<a:ln w="9525"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln>'.repeat(3);
+  const effectStyles = '<a:effectStyle><a:effectLst/></a:effectStyle>'.repeat(3);
+  const theme = head +
+    '<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Fishbone">' +
+    '<a:themeElements><a:clrScheme name="Fishbone">' +
+    '<a:dk1><a:srgbClr val="222222"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1>' +
+    '<a:dk2><a:srgbClr val="1F4E79"/></a:dk2><a:lt2><a:srgbClr val="F4F6F8"/></a:lt2>' +
+    '<a:accent1><a:srgbClr val="1F4E79"/></a:accent1><a:accent2><a:srgbClr val="2C5F2D"/></a:accent2>' +
+    '<a:accent3><a:srgbClr val="B85042"/></a:accent3><a:accent4><a:srgbClr val="333333"/></a:accent4>' +
+    '<a:accent5><a:srgbClr val="9DB7D1"/></a:accent5><a:accent6><a:srgbClr val="A2412F"/></a:accent6>' +
+    '<a:hlink><a:srgbClr val="1F4E79"/></a:hlink><a:folHlink><a:srgbClr val="6D2E46"/></a:folHlink>' +
+    '</a:clrScheme><a:fontScheme name="Fishbone">' +
+    '<a:majorFont><a:latin typeface="Meiryo UI"/><a:ea typeface="Meiryo UI"/><a:cs typeface=""/></a:majorFont>' +
+    '<a:minorFont><a:latin typeface="Meiryo UI"/><a:ea typeface="Meiryo UI"/><a:cs typeface=""/></a:minorFont>' +
+    '</a:fontScheme><a:fmtScheme name="Fishbone">' +
+    `<a:fillStyleLst>${fillStyles}</a:fillStyleLst><a:lnStyleLst>${lineStyles}</a:lnStyleLst>` +
+    `<a:effectStyleLst>${effectStyles}</a:effectStyleLst><a:bgFillStyleLst>${fillStyles}</a:bgFillStyleLst>` +
+    '</a:fmtScheme></a:themeElements></a:theme>';
+
+  return {
+    "[Content_Types].xml": head +
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+      '<Default Extension="xml" ContentType="application/xml"/>' +
+      '<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>' +
+      '<Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>' +
+      '<Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>' +
+      '<Override PartName="/ppt/slides/slide1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>' +
+      '<Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>' +
+      '<Override PartName="/ppt/presProps.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presProps+xml"/>' +
+      '<Override PartName="/ppt/viewProps.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.viewProps+xml"/>' +
+      '<Override PartName="/ppt/tableStyles.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.tableStyles+xml"/>' +
+      '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>' +
+      '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>' +
+      '</Types>',
+    "_rels/.rels": rels([
+      rel("rId1", "officeDocument", "ppt/presentation.xml"),
+      '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>',
+      rel("rId3", "extended-properties", "docProps/app.xml")
+    ]),
+    "docProps/core.xml": head +
+      '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" ' +
+      'xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" ' +
+      'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">' +
+      `<dc:title>${title}</dc:title><dc:creator>フィッシュボーン図メーカー</dc:creator>` +
+      `<dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created>` +
+      `<dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified></cp:coreProperties>`,
+    "docProps/app.xml": head +
+      '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">' +
+      '<Application>フィッシュボーン図メーカー</Application><Slides>1</Slides></Properties>',
+    "ppt/presentation.xml": head + `<p:presentation ${ns}>` +
+      '<p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst>' +
+      '<p:sldIdLst><p:sldId id="256" r:id="rId2"/></p:sldIdLst>' +
+      `<p:sldSz cx="${SLIDE.width}" cy="${SLIDE.height}"/><p:notesSz cx="6858000" cy="9144000"/>` +
+      '</p:presentation>',
+    "ppt/_rels/presentation.xml.rels": rels([
+      rel("rId1", "slideMaster", "slideMasters/slideMaster1.xml"),
+      rel("rId2", "slide", "slides/slide1.xml"),
+      rel("rId3", "theme", "theme/theme1.xml"),
+      rel("rId4", "presProps", "presProps.xml"),
+      rel("rId5", "viewProps", "viewProps.xml"),
+      rel("rId6", "tableStyles", "tableStyles.xml")
+    ]),
+    "ppt/presProps.xml": head + `<p:presentationPr ${ns}/>`,
+    "ppt/viewProps.xml": head + `<p:viewPr ${ns}/>`,
+    "ppt/tableStyles.xml": head +
+      '<a:tblStyleLst xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" def="{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}"/>',
+    "ppt/slideMasters/slideMaster1.xml": head + `<p:sldMaster ${ns}>` +
+      `<p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>${emptyTree}</p:cSld>` +
+      '<p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" ' +
+      'accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>' +
+      '<p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst></p:sldMaster>',
+    "ppt/slideMasters/_rels/slideMaster1.xml.rels": rels([
+      rel("rId1", "slideLayout", "../slideLayouts/slideLayout1.xml"),
+      rel("rId2", "theme", "../theme/theme1.xml")
+    ]),
+    "ppt/slideLayouts/slideLayout1.xml": head + `<p:sldLayout ${ns} type="blank" preserve="1">` +
+      `<p:cSld name="白紙">${emptyTree}</p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`,
+    "ppt/slideLayouts/_rels/slideLayout1.xml.rels": rels([
+      rel("rId1", "slideMaster", "../slideMasters/slideMaster1.xml")
+    ]),
+    "ppt/slides/slide1.xml": buildSlideXml(shapes, layout),
+    "ppt/slides/_rels/slide1.xml.rels": rels([
+      rel("rId1", "slideLayout", "../slideLayouts/slideLayout1.xml")
+    ]),
+    "ppt/theme/theme1.xml": theme
+  };
+}
+
+// ZIPファイルを作る（圧縮なしの形式。.pptx はこの形式でも開ける）
+const CRC_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+    table[n] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(bytes) {
+  let crc = 0xFFFFFFFF;
+  for (const byte of bytes) crc = CRC_TABLE[(crc ^ byte) & 0xFF] ^ (crc >>> 8);
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+function createZip(files) {
+  const encoder = new TextEncoder();
+  const localParts = [];
+  const centralParts = [];
+  let offset = 0;
+
+  for (const [name, content] of Object.entries(files)) {
+    const nameBytes = encoder.encode(name);
+    const dataBytes = encoder.encode(content);
+    const crc = crc32(dataBytes);
+
+    // 各ファイルの前に置くヘッダー
+    const local = new DataView(new ArrayBuffer(30));
+    local.setUint32(0, 0x04034B50, true);   // 目印
+    local.setUint16(4, 20, true);           // 必要なバージョン
+    local.setUint16(6, 0x0800, true);       // ファイル名はUTF-8
+    local.setUint16(8, 0, true);            // 圧縮なし
+    local.setUint32(14, crc, true);
+    local.setUint32(18, dataBytes.length, true);
+    local.setUint32(22, dataBytes.length, true);
+    local.setUint16(26, nameBytes.length, true);
+    localParts.push(new Uint8Array(local.buffer), nameBytes, dataBytes);
+
+    // 最後にまとめて置く目次
+    const central = new DataView(new ArrayBuffer(46));
+    central.setUint32(0, 0x02014B50, true);
+    central.setUint16(4, 20, true);
+    central.setUint16(6, 20, true);
+    central.setUint16(8, 0x0800, true);
+    central.setUint16(10, 0, true);
+    central.setUint32(16, crc, true);
+    central.setUint32(20, dataBytes.length, true);
+    central.setUint32(24, dataBytes.length, true);
+    central.setUint16(28, nameBytes.length, true);
+    central.setUint32(42, offset, true);
+    centralParts.push(new Uint8Array(central.buffer), nameBytes);
+
+    offset += 30 + nameBytes.length + dataBytes.length;
+  }
+
+  const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054B50, true);
+  end.setUint16(8, Object.keys(files).length, true);
+  end.setUint16(10, Object.keys(files).length, true);
+  end.setUint32(12, centralSize, true);
+  end.setUint32(16, offset, true);
+
+  return new Blob([...localParts, ...centralParts, new Uint8Array(end.buffer)],
+    { type: "application/vnd.openxmlformats-officedocument.presentationml.presentation" });
+}
+
+
 // ===== 11. ファイルに保存・ファイルを開く =====
 
-function saveDataFile() {
+async function saveDataFile() {
   if (activeEditor) closeEditor(true);
+  const fileName = await askFileName("json");
+  if (!fileName) return;
   const content = {
     type: SAVE_FILE_TYPE,
     version: 1,
@@ -1174,7 +1607,7 @@ function saveDataFile() {
     theme: data.theme,
     bones: data.bones
   };
-  downloadFile(makeFileName("json"), new Blob([JSON.stringify(content, null, 2)], { type: "application/json" }));
+  downloadFile(fileName, new Blob([JSON.stringify(content, null, 2)], { type: "application/json" }));
 }
 
 const fileInput = document.getElementById("fileInput");
@@ -1260,6 +1693,7 @@ function resetDiagram() {
 
 document.getElementById("exportPng").addEventListener("click", exportPng);
 document.getElementById("exportPdf").addEventListener("click", exportPdf);
+document.getElementById("exportPptx").addEventListener("click", exportPptx);
 document.getElementById("saveDataFile").addEventListener("click", saveDataFile);
 document.getElementById("openDataFile").addEventListener("click", openDataFile);
 document.getElementById("reset").addEventListener("click", resetDiagram);
