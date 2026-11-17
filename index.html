@@ -4,18 +4,19 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="description" content="ブラウザだけで使えるフィッシュボーン図（特性要因図）作成ツール。図の文字をクリックして入力し、PNG・PDF・PowerPointで書き出せます。">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231F4E79'/%3E%3Cpath d='M5 16h18M9 8l5 8M9 24l5-8M15 8l5 8M15 24l5-8' stroke='white' stroke-width='2.4' stroke-linecap='round' fill='none'/%3E%3Cpath d='M22 11l6 5-6 5z' fill='white'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23111111'/%3E%3Cpath d='M5 16h18M9 8l5 8M9 24l5-8M15 8l5 8M15 24l5-8' stroke='white' stroke-width='2.4' stroke-linecap='round' fill='none'/%3E%3Cpath d='M22 11l6 5-6 5z' fill='white'/%3E%3C/svg%3E">
 <title>フィッシュボーン図メーカー</title>
 <style>
   /* ===== 基本 ===== */
   :root {
     color-scheme: light;
-    --accent: #1F4E79;
-    --accent-light: #E8EFF6;
-    --border: #CCD5DF;
-    --bg: #F4F6F8;
+    --accent: #111111;
+    --accent-light: #F4F4F5;
+    --border: #E4E4E7;
+    --bg: #FFFFFF;
+    --muted: #71717A;
     --danger: #B3261E;
-    --font: "Meiryo UI", "Meiryo", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
+    --font: "Yu Gothic UI", "Meiryo UI", "Meiryo", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
   }
   * { box-sizing: border-box; }
   /* ページ全体は固定し、図の部分（.preview）だけをスクロールさせる */
@@ -31,17 +32,17 @@
   }
   button {
     font-family: var(--font);
-    font-size: 15px;
+    font-size: 14px;
     cursor: pointer;
     border-radius: 8px;
-    border: 1px solid var(--accent);
+    border: 1px solid var(--border);
     background: #fff;
     color: var(--accent);
     padding: 8px 14px;
   }
   button:hover { background: var(--accent-light); }
-  button.primary { background: var(--accent); color: #fff; }
-  button.primary:hover { background: #163a5b; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { background: #27272A; }
   button.danger { border-color: var(--danger); color: var(--danger); }
   button.danger:hover { background: #FBEAEA; }
 
@@ -50,29 +51,20 @@
     flex: none;
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 12px 20px;
+    gap: 12px;
+    padding: 10px 20px;
     background: #fff;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid #F0F0F1;
   }
-  header h1 { font-size: 20px; margin: 0; color: var(--accent); }
-  .hint { font-size: 14px; color: #555; margin-right: auto; }
+  header h1 { font-size: 16px; margin: 0; color: var(--accent); display: flex; align-items: center; gap: 10px; letter-spacing: 0.01em; }
+  /* タイトル左のロゴ（小さなフィッシュボーン） */
+  .logo { width: 22px; height: 22px; flex: none; display: block; }
+  .hint { font-size: 12.5px; color: var(--muted); margin-right: auto; }
   .title-short { display: none; }
-  /* 保存ボタン（フロッピーディスクの絵）。保存していない変更があるときは右上に点を出す */
+  /* 保存ボタン（フロッピーディスクの絵） */
   .save-button { position: relative; display: flex; align-items: center; justify-content: center; padding: 7px 10px; }
   .save-button svg { display: block; }
   .save-button .caret { font-size: 11px; margin-left: 3px; }
-  .save-button.unsaved::after {
-    content: "";
-    position: absolute;
-    top: -4px;
-    right: -4px;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: #E8590C;
-    border: 2px solid #fff;
-  }
   @media (max-width: 760px) {
     .hint { display: none; }
     header h1 { margin-right: auto; }
@@ -80,12 +72,12 @@
   /* スマホの幅：タイトルを短くし、余白を詰める */
   @media (max-width: 600px) {
     header { padding: 8px 12px; }
-    header h1 { font-size: 17px; }
+    header h1 { font-size: 15px; }
     .title-full { display: none; }
     .title-short { display: inline; }
     #menuButton { padding: 7px 12px; white-space: nowrap; }
     .save-button { padding: 6px 9px; }
-    main { padding: 8px; }
+    main { padding: 0 8px 8px; }
     .preview { padding: 6px; border-radius: 8px; }
     .zoom-controls { right: 16px; bottom: 16px; }
   }
@@ -100,8 +92,8 @@
     min-width: 240px;
     background: #fff;
     border: 1px solid var(--border);
-    border-radius: 10px;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
     padding: 6px;
     z-index: 25;
   }
@@ -120,7 +112,7 @@
   .menu-list .menu-link { display: block; padding: 10px 12px; border-radius: 6px; color: #222; text-decoration: none; font-size: 15px; }
   .menu-list .menu-link:hover { background: var(--accent-light); }
   .menu-list button.danger:hover { background: #FBEAEA; }
-  .menu-heading { font-size: 12px; color: #777; padding: 6px 12px 2px; }
+  .menu-heading { font-size: 12px; color: var(--muted); padding: 6px 12px 2px; }
   .menu-separator { height: 1px; background: var(--border); margin: 4px 6px; }
   .menu-list .theme-item { display: flex; align-items: center; gap: 8px; }
   .theme-swatch { width: 14px; height: 14px; border-radius: 4px; flex: none; border: 1px solid #999; }
@@ -131,18 +123,22 @@
   main {
     flex: 1;
     min-height: 0;
-    padding: 16px;
+    padding: 0 20px 20px;
     position: relative;
   }
+  /* 図の後ろは薄い灰色に細かい点（図そのものの白い背景は画面では透明にする） */
   .preview {
     height: 100%;
     overflow: auto;
     display: flex;
-    background: #fff;
-    border: 1px solid var(--border);
-    border-radius: 10px;
+    background-color: #FAFAFA;
+    background-image: radial-gradient(#DCDCE0 1px, transparent 1px);
+    background-size: 18px 18px;
+    border: 1px solid #EDEDEF;
+    border-radius: 14px;
     padding: 10px;
   }
+  .canvas svg > rect:first-child { fill: transparent; }
   .preview.can-pan { cursor: grab; }
   .preview.panning { cursor: grabbing; }
   /* margin: auto で、図が小さいときは中央に、大きいときは左上からスクロールできるようにする */
@@ -160,6 +156,24 @@
   }
   .ui-button { cursor: pointer; }
   .ui-button:hover circle, .ui-button:hover rect { filter: brightness(0.93); }
+  /* 骨の入れ替え（ドラッグ）中の見た目 */
+  .drag-source { opacity: 0.35; }
+  .drop-target .hover-frame { stroke: var(--accent); stroke-width: 2.5; stroke-dasharray: none; }
+  .preview.dragging-bone, .preview.dragging-bone * { cursor: grabbing; }
+  .drag-ghost {
+    position: fixed;
+    z-index: 30;
+    pointer-events: none;
+    background: #fff;
+    border: 2px solid var(--accent);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 14px;
+    color: #222;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+    white-space: nowrap;
+    transform: translate(12px, 12px);
+  }
   .inline-editor {
     position: absolute;
     font-family: var(--font);
@@ -182,12 +196,12 @@
     gap: 4px;
     background: #fff;
     border: 1px solid var(--border);
-    border-radius: 999px;
+    border-radius: 10px;
     padding: 4px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
     z-index: 15;
   }
-  .zoom-controls button { border: none; padding: 4px 10px; font-size: 14px; border-radius: 999px; }
+  .zoom-controls button { border: none; padding: 4px 10px; font-size: 14px; border-radius: 7px; }
   .zoom-controls .icon-only { display: flex; align-items: center; justify-content: center; padding: 6px 9px; }
 
   /* ===== 確認画面 ===== */
@@ -201,7 +215,7 @@
     z-index: 20;
   }
   .modal-back.show { display: flex; }
-  .modal { background: #fff; border-radius: 10px; padding: 20px; max-width: 380px; width: calc(100% - 32px); }
+  .modal { background: #fff; border-radius: 14px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12); padding: 20px; max-width: 380px; width: calc(100% - 32px); }
   .modal p { margin: 0 0 16px; line-height: 1.6; }
   .modal-buttons { display: flex; gap: 8px; justify-content: flex-end; }
   .file-name-row { display: flex; align-items: center; gap: 6px; margin-bottom: 16px; }
@@ -216,7 +230,7 @@
     color: #222;
   }
   .file-name-row input:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
-  .file-extension { color: #555; font-size: 15px; }
+  .file-extension { color: var(--muted); font-size: 15px; }
   .option-row { display: flex; align-items: center; gap: 8px; margin: -4px 0 16px; font-size: 14px; cursor: pointer; }
   .option-row input { width: 18px; height: 18px; margin: 0; flex: none; accent-color: var(--accent); }
 
@@ -226,11 +240,11 @@
     left: 50%;
     bottom: 24px;
     transform: translateX(-50%);
-    background: #222;
+    background: #111;
     color: #fff;
-    font-size: 14px;
+    font-size: 13px;
     padding: 8px 16px;
-    border-radius: 999px;
+    border-radius: 8px;
     z-index: 30;
     pointer-events: none;
   }
@@ -239,7 +253,13 @@
 </head>
 <body>
 <header>
-  <h1><span class="title-full">フィッシュボーン図メーカー</span><span class="title-short">フィッシュボーン図</span></h1>
+  <h1>
+    <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
+      <rect width="32" height="32" rx="7" fill="#111111"/>
+      <path d="M5 16h17M9 8l5 8M9 24l5-8M15 8l5 8M15 24l5-8" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" fill="none"/>
+      <path d="M22 11l6 5-6 5z" fill="#FFFFFF"/>
+    </svg>
+    <span class="title-full">フィッシュボーン図メーカー</span><span class="title-short">フィッシュボーン図</span></h1>
   <span class="hint">図の文字をクリックすると入力できます</span>
   <!-- 保存ボタン：ファイルの保存・開く・書き出しをまとめたメニューを開く -->
   <div class="menu">
@@ -379,25 +399,27 @@ const MIN_BONE_HEIGHT = 190;    // 大骨の縦の長さ（最小）
 const BONE_LEAN = 0.6;          // 大骨の傾き（横の長さ ÷ 縦の長さ）
 const BONE_OVERLAP = 8;         // 大骨の線を名前の枠の中まで延ばす長さ（すき間なくつなげるため）
 const COLUMN_GAP = SMALL_LENGTH + 60;  // 大骨どうしの横の間隔
-const LABEL_WIDTH = 176;        // 大骨の名前の枠の幅（15pxの太字で1行10文字・2行で20文字ほど）
-const LABEL_ROOM = 64;          // 大骨の名前の枠のために上下に空けておく高さ
-const HEAD_WIDTH = 190;         // 問題（頭）の枠の幅
+const LABEL_WIDTH = 204;        // 大骨の名前の枠の幅（18pxの太字で1行10文字・2行で20文字ほど）
+const LABEL_PADDING = 12;       // 大骨の名前の枠の上下の余白
+const LABEL_ROOM = 78;          // 大骨の名前の枠のために上下に空けておく高さ
+const HEAD_WIDTH = 236;         // 問題（頭）の枠の幅
+const HEAD_MIN_HEIGHT = 136;    // 問題（頭）の枠の高さ（最小）
 
 // 文字の大きさの段階：長い文字は、収まるまで順に小さくする
-//   問題（頭）：20文字ほどまでは18px
+//   問題（頭）：20文字ほどまでは22px
 const HEAD_FONT_STEPS = [
-  { size: 18, lineHeight: 26, maxLines: 3 },
-  { size: 16, lineHeight: 22, maxLines: 4 },
-  { size: 14, lineHeight: 19, maxLines: 5 },
-  { size: 13, lineHeight: 17, maxLines: 6 }
+  { size: 22, lineHeight: 30, maxLines: 3 },
+  { size: 19, lineHeight: 26, maxLines: 4 },
+  { size: 16, lineHeight: 22, maxLines: 5 },
+  { size: 14, lineHeight: 19, maxLines: 6 }
 ];
-//   大骨の名前：20文字ほどまでは15pxで2行
+//   大骨の名前：20文字ほどまでは18pxで2行
 const LABEL_FONT_STEPS = [
+  { size: 18, lineHeight: 23, maxLines: 2 },
+  { size: 16, lineHeight: 21, maxLines: 2 },
   { size: 15, lineHeight: 19, maxLines: 2 },
-  { size: 14, lineHeight: 18, maxLines: 2 },
-  { size: 13, lineHeight: 16, maxLines: 2 },
-  { size: 12, lineHeight: 15, maxLines: 3 },
-  { size: 11, lineHeight: 14, maxLines: 3 }
+  { size: 13, lineHeight: 17, maxLines: 3 },
+  { size: 12, lineHeight: 15, maxLines: 3 }
 ];
 //   小骨：20文字ほどまでは14pxで2行
 const SMALL_FONT_STEPS = [
@@ -498,14 +520,6 @@ let savedSnapshot = JSON.stringify(data);
 
 function markSaved() {
   savedSnapshot = JSON.stringify(data);
-  updateSaveButton();
-}
-
-// 保存ボタンの点（保存していない変更があるときだけ出す）
-function updateSaveButton() {
-  const unsaved = hasUnsavedChanges();
-  saveButton.classList.toggle("unsaved", unsaved);
-  saveButton.title = unsaved ? "保存・書き出し（ファイルに保存していない変更があります）" : "保存・書き出し";
 }
 
 function hasUnsavedChanges() {
@@ -530,7 +544,6 @@ function currentTheme() {
 function saveAndRender() {
   saveToBrowser();
   renderPreview();
-  updateSaveButton();
 }
 
 
@@ -647,6 +660,7 @@ function addEditableArea(parent, key, x, y, width, height) {
   }));
   group.addEventListener("click", event => {
     event.stopPropagation();
+    if (dragJustEnded) return;   // ドラッグで入れ替えた直後のクリックでは入力欄を開かない
     openEditor(key);
   });
   parent.appendChild(group);
@@ -724,8 +738,8 @@ function drawSpineAndHead(svg, layout, theme, editMode) {
   }));
   recordShape({ type: "line", x1: PADDING, y1: spineY, x2: headX - 2, y2: spineY, width: SPINE_WIDTH, color: LINE_COLOR, arrowEnd: true, group: null });
 
-  const head = fitText(data.head.trim() || "問題（結果）", HEAD_FONT_STEPS, true, HEAD_WIDTH - 28);
-  const headHeight = Math.max(110, head.lines.length * head.lineHeight + 34);
+  const head = fitText(data.head.trim() || "問題（結果）", HEAD_FONT_STEPS, true, HEAD_WIDTH - 32);
+  const headHeight = Math.max(HEAD_MIN_HEIGHT, head.lines.length * head.lineHeight + 40);
   const headTop = spineY - headHeight / 2;
   svg.appendChild(svgElement("rect", {
     x: headX, y: headTop, width: HEAD_WIDTH, height: headHeight,
@@ -785,13 +799,14 @@ function drawBone(svg, layout, theme, editMode, bone, boneIndex) {
     x1: lineEndX, y1: lineEndY, x2: attachX, y2: spineY,
     stroke: LINE_COLOR, "stroke-width": 3
   }));
-  const defaultName = `要因${boneIndex + 1}`;
-  recordShape({ type: "line", x1: lineEndX, y1: lineEndY, x2: attachX, y2: spineY, width: 3, color: LINE_COLOR, group: defaultName });
+  // PowerPoint で大骨ごとにまとめるグループの名前（見えるのは PowerPoint の「選択」画面だけ）
+  const groupName = `要因${boneIndex + 1}`;
+  recordShape({ type: "line", x1: lineEndX, y1: lineEndY, x2: attachX, y2: spineY, width: 3, color: LINE_COLOR, group: groupName });
 
   // 名前の枠（大骨の端に接して置く）
-  const labelText = bone.name.trim() || defaultName;
-  const label = fitText(labelText, LABEL_FONT_STEPS, true, LABEL_WIDTH - 20);
-  const labelHeight = label.lines.length * label.lineHeight + 18;
+  const labelText = bone.name.trim() || "要因";
+  const label = fitText(labelText, LABEL_FONT_STEPS, true, LABEL_WIDTH - 24);
+  const labelHeight = label.lines.length * label.lineHeight + LABEL_PADDING * 2;
   const labelX = endX - LABEL_WIDTH / 2;
   const labelY = isTop ? endY - labelHeight : endY;
   svg.appendChild(svgElement("rect", {
@@ -801,9 +816,9 @@ function drawBone(svg, layout, theme, editMode, bone, boneIndex) {
   recordShape({
     type: "box", x: labelX, y: labelY, w: LABEL_WIDTH, h: labelHeight,
     fill: "#FFFFFF", stroke: theme.accent, strokeWidth: 2,
-    text: labelText, fontSize: label.size, bold: true, textColor: theme.accent, group: defaultName
+    text: labelText, fontSize: label.size, bold: true, textColor: theme.accent, group: groupName
   });
-  addTextLines(svg, label.lines, endX, labelY + 9 + label.size - 1, label.lineHeight,
+  addTextLines(svg, label.lines, endX, labelY + LABEL_PADDING + label.size - 1, label.lineHeight,
     { size: label.size, bold: true, color: theme.accent, anchor: "middle" });
 
   if (editMode) {
@@ -821,7 +836,8 @@ function drawBone(svg, layout, theme, editMode, bone, boneIndex) {
     // 大骨を消す「×」：名前の枠の右上
     if (data.bones.length > MIN_BONES) {
       addRoundButton(svg, labelX + LABEL_WIDTH - 2, labelY + 2, 8, "cross", DANGER_COLOR, "この大骨を削除", () => {
-        askConfirm(`大骨「${labelText}」と、その小骨をすべて削除しますか？`, () => {
+        const target = bone.name.trim() ? `大骨「${bone.name.trim()}」` : "この大骨";
+        askConfirm(`${target}と、その小骨をすべて削除しますか？`, () => {
           data.bones.splice(boneIndex, 1);
           saveAndRender();
         });
@@ -844,7 +860,7 @@ function drawBone(svg, layout, theme, editMode, bone, boneIndex) {
       x1: lineStartX, y1: pointY, x2: pointX, y2: pointY,
       stroke: LINE_COLOR, "stroke-width": 1.6
     }));
-    recordShape({ type: "line", x1: lineStartX, y1: pointY, x2: pointX, y2: pointY, width: 1.6, color: LINE_COLOR, group: defaultName });
+    recordShape({ type: "line", x1: lineStartX, y1: pointY, x2: pointX, y2: pointY, width: 1.6, color: LINE_COLOR, group: groupName });
 
     // 上側の大骨は、文字の右端に大骨の線が重ならないよう幅を狭める
     const textWidth = isTop ? SMALL_LENGTH - 40 : SMALL_LENGTH - 12;
@@ -856,7 +872,7 @@ function drawBone(svg, layout, theme, editMode, bone, boneIndex) {
       const textHeight = fitted.lines.length * fitted.lineHeight + 6;
       recordShape({
         type: "text", x: lineStartX, y: pointY - 2 - textHeight, w: textWidth, h: textHeight,
-        text: text, fontSize: fitted.size, color: LINE_COLOR, group: defaultName
+        text: text, fontSize: fitted.size, color: LINE_COLOR, group: groupName
       });
     } else if (editMode) {
       addTextLines(svg, [isTouchDevice ? "タップして入力" : "クリックして入力"], lineStartX, pointY - 6, 0,
@@ -1070,7 +1086,7 @@ function openEditor(key, autoAdded = false) {
   const canvasBox = canvasElement.getBoundingClientRect();
   const areaBox = area.getBoundingClientRect();
   const scale = svg.getBoundingClientRect().width / Number(svg.getAttribute("width"));
-  const baseFontSize = key === "head" ? 18 : key.startsWith("bone") ? 15 : 14;
+  const baseFontSize = key === "head" ? 22 : key.startsWith("bone") ? 18 : 14;
 
   // 入力欄は、マウスを乗せたときに出る点線の枠とぴったり同じ位置・大きさにする。
   // 位置は図（canvas）の左上が基準なので、スクロールしても図と一緒に動く
@@ -1153,6 +1169,101 @@ function nextSmallTarget(key) {
   }
   return null;
 }
+
+
+// ===== 7-2. 骨の入れ替え（パソコンのマウスでドラッグ） =====
+//  要因の枠を別の要因の枠に重ねて離すと、大骨を小骨ごと入れ替える。
+//  小骨の文字を同じ大骨の別の小骨に重ねて離すと、小骨どうしを入れ替える。
+//  少しでも動かしたらドラッグ、動かさずに離したら今までどおり入力欄を開く
+
+const DRAG_THRESHOLD = 5;   // これ以上動かしたらドラッグとみなす（画面のピクセル）
+let dragState = null;       // ドラッグ中のとき { key, startX, startY, moved, ghost, sourceArea, targetArea }
+let dragJustEnded = false;  // ドラッグを終えた直後のクリックを無視するための印
+
+// 入れ替えられる組み合わせか（大骨どうし、または同じ大骨の小骨どうし）
+function canSwap(fromKey, toKey) {
+  if (fromKey === toKey) return false;
+  const from = parseKey(fromKey);
+  const to = parseKey(toKey);
+  if (from.kind === "bone" && to.kind === "bone") return true;
+  return from.kind === "small" && to.kind === "small" && from.boneIndex === to.boneIndex;
+}
+
+function swapItems(fromKey, toKey) {
+  const from = parseKey(fromKey);
+  const to = parseKey(toKey);
+  const list = from.kind === "bone" ? data.bones : data.bones[from.boneIndex].smalls;
+  const a = from.kind === "bone" ? from.boneIndex : from.smallIndex;
+  const b = to.kind === "bone" ? to.boneIndex : to.smallIndex;
+  [list[a], list[b]] = [list[b], list[a]];
+  saveAndRender();
+}
+
+function setDropTarget(area) {
+  if (dragState.targetArea === area) return;
+  if (dragState.targetArea) dragState.targetArea.classList.remove("drop-target");
+  dragState.targetArea = area;
+  if (area) area.classList.add("drop-target");
+}
+
+function startDrag() {
+  if (activeEditor) closeEditor(true);
+  // 入力欄を閉じると図が描き直されることがあるので、つかんだ部品を探し直す
+  dragState.sourceArea = canvasElement.querySelector(`[data-key="${dragState.key}"]`);
+  if (dragState.sourceArea) dragState.sourceArea.classList.add("drag-source");
+  const ghost = document.createElement("div");
+  ghost.className = "drag-ghost";
+  const { kind } = parseKey(dragState.key);
+  ghost.textContent = (getValue(dragState.key) || "").trim() || (kind === "bone" ? "要因" : "小要因");
+  document.body.appendChild(ghost);
+  dragState.ghost = ghost;
+  previewElement.classList.add("dragging-bone");
+}
+
+function endDrag() {
+  if (dragState.ghost) dragState.ghost.remove();
+  if (dragState.sourceArea) dragState.sourceArea.classList.remove("drag-source");
+  if (dragState.targetArea) dragState.targetArea.classList.remove("drop-target");
+  previewElement.classList.remove("dragging-bone");
+  dragState = null;
+}
+
+canvasElement.addEventListener("pointerdown", event => {
+  if (event.pointerType !== "mouse" || event.button !== 0) return;
+  const area = event.target.closest(".editable");
+  if (!area || area.dataset.key === "head") return;
+  dragState = { key: area.dataset.key, startX: event.clientX, startY: event.clientY, moved: false,
+                ghost: null, sourceArea: null, targetArea: null };
+});
+
+window.addEventListener("pointermove", event => {
+  if (!dragState) return;
+  if (!dragState.moved) {
+    if (Math.abs(event.clientX - dragState.startX) + Math.abs(event.clientY - dragState.startY) <= DRAG_THRESHOLD) return;
+    dragState.moved = true;
+    startDrag();
+  }
+  dragState.ghost.style.left = `${event.clientX}px`;
+  dragState.ghost.style.top = `${event.clientY}px`;
+  const under = document.elementFromPoint(event.clientX, event.clientY);
+  const area = under ? under.closest(".editable") : null;
+  setDropTarget(area && canSwap(dragState.key, area.dataset.key) ? area : null);
+});
+
+window.addEventListener("pointerup", () => {
+  if (!dragState) return;
+  const { moved, key, targetArea } = dragState;
+  const targetKey = targetArea ? targetArea.dataset.key : null;
+  endDrag();
+  if (!moved) return;
+  dragJustEnded = true;
+  setTimeout(() => { dragJustEnded = false; }, 0);
+  if (targetKey) swapItems(key, targetKey);
+});
+
+// ブラウザの外で離したときやウィンドウを切り替えたときは、入れ替えずにやめる
+window.addEventListener("pointercancel", () => { if (dragState) endDrag(); });
+window.addEventListener("blur", () => { if (dragState) endDrag(); });
 
 
 // ===== 8. 確認画面 =====
@@ -1304,12 +1415,9 @@ window.addEventListener("beforeunload", event => {
 // 書き出し用のデータを作る（元のデータは変えない）。
 // 何も入力されていないときは null を返す（そのときは、そのまま書き出す）
 function createExportData() {
-  const bones = [];
-  data.bones.forEach((bone, boneIndex) => {
-    if (isUnusedBone(bone)) return;
-    // 名前が空の大骨は、画面で見えているのと同じ「要因○」のままにする
-    bones.push({ name: bone.name.trim() || `要因${boneIndex + 1}`, smalls: usedSmalls(bone) });
-  });
+  const bones = data.bones
+    .filter(bone => !isUnusedBone(bone))
+    .map(bone => ({ name: bone.name.trim(), smalls: usedSmalls(bone) }));
   if (bones.length === 0) return null;
   return { head: data.head, theme: data.theme, bones: bones };
 }
