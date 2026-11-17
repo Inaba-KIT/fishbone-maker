@@ -1,0 +1,1223 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="ブラウザだけで使えるフィッシュボーン図（特性要因図）作成ツール。図の文字をクリックして入力し、PNG・PDFで書き出せます。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231F4E79'/%3E%3Cpath d='M5 16h18M9 8l5 8M9 24l5-8M15 8l5 8M15 24l5-8' stroke='white' stroke-width='2.4' stroke-linecap='round' fill='none'/%3E%3Cpath d='M22 11l6 5-6 5z' fill='white'/%3E%3C/svg%3E">
+<title>フィッシュボーン図メーカー</title>
+<style>
+  /* ===== 基本 ===== */
+  :root {
+    color-scheme: light;
+    --accent: #1F4E79;
+    --accent-light: #E8EFF6;
+    --border: #CCD5DF;
+    --bg: #F4F6F8;
+    --danger: #B3261E;
+    --font: "Meiryo UI", "Meiryo", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  /* ページ全体は固定し、図の部分（.preview）だけをスクロールさせる */
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    font-family: var(--font);
+    background: var(--bg);
+    color: #222;
+  }
+  button {
+    font-family: var(--font);
+    font-size: 15px;
+    cursor: pointer;
+    border-radius: 8px;
+    border: 1px solid var(--accent);
+    background: #fff;
+    color: var(--accent);
+    padding: 8px 14px;
+  }
+  button:hover { background: var(--accent-light); }
+  button.primary { background: var(--accent); color: #fff; }
+  button.primary:hover { background: #163a5b; }
+  button.danger { border-color: var(--danger); color: var(--danger); }
+  button.danger:hover { background: #FBEAEA; }
+
+  /* ===== 上のバー ===== */
+  header {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 20px;
+    background: #fff;
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 { font-size: 20px; margin: 0; color: var(--accent); }
+  .hint { font-size: 14px; color: #555; margin-right: auto; }
+  @media (max-width: 760px) {
+    .hint { display: none; }
+    header h1 { margin-right: auto; }
+  }
+
+  /* ===== メニュー（プルダウン） ===== */
+  .menu { position: relative; }
+  .menu-list {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    min-width: 240px;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+    padding: 6px;
+    z-index: 25;
+  }
+  .menu-list.show { display: block; }
+  .menu-list button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 12px;
+    color: #222;
+  }
+  .menu-list button:hover { background: var(--accent-light); }
+  .menu-list button.danger { color: var(--danger); }
+  .menu-list button.danger:hover { background: #FBEAEA; }
+  .menu-heading { font-size: 12px; color: #777; padding: 6px 12px 2px; }
+  .menu-separator { height: 1px; background: var(--border); margin: 4px 6px; }
+  .menu-list .theme-item { display: flex; align-items: center; gap: 8px; }
+  .theme-swatch { width: 14px; height: 14px; border-radius: 4px; flex: none; border: 1px solid #999; }
+  .theme-check { margin-left: auto; color: var(--accent); font-weight: bold; visibility: hidden; }
+  .theme-item.selected .theme-check { visibility: visible; }
+
+  /* ===== 図の表示部分 ===== */
+  main {
+    flex: 1;
+    min-height: 0;
+    padding: 16px;
+    position: relative;
+  }
+  .preview {
+    height: 100%;
+    overflow: auto;
+    display: flex;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px;
+  }
+  .preview.can-pan { cursor: grab; }
+  .preview.panning { cursor: grabbing; }
+  /* margin: auto で、図が小さいときは中央に、大きいときは左上からスクロールできるようにする */
+  .canvas { position: relative; margin: auto; flex: none; }
+  .canvas svg { display: block; user-select: none; }
+
+  /* 図の中の操作できる部分 */
+  .editable { cursor: text; }
+  .editable:hover .hover-frame { stroke: #9DB7D1; }
+  .ui-button { cursor: pointer; }
+  .ui-button:hover circle, .ui-button:hover rect { filter: brightness(0.93); }
+  .inline-editor {
+    position: absolute;
+    font-family: var(--font);
+    border: 2px solid var(--accent);
+    border-radius: 6px;
+    padding: 2px 6px;
+    background: #fff;
+    color: #222;
+    z-index: 10;
+    outline: none;
+  }
+
+  /* ===== 拡大・縮小ボタン ===== */
+  .zoom-controls {
+    position: absolute;
+    right: 30px;
+    bottom: 30px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    z-index: 15;
+  }
+  .zoom-controls button { border: none; padding: 4px 10px; font-size: 14px; border-radius: 999px; }
+  .zoom-controls .icon-only { display: flex; align-items: center; justify-content: center; padding: 6px 9px; }
+  .zoom-value { font-size: 13px; color: #555; min-width: 44px; text-align: center; }
+
+  /* ===== 確認画面 ===== */
+  .modal-back {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
+  }
+  .modal-back.show { display: flex; }
+  .modal { background: #fff; border-radius: 10px; padding: 20px; max-width: 380px; }
+  .modal p { margin: 0 0 16px; line-height: 1.6; }
+  .modal-buttons { display: flex; gap: 8px; justify-content: flex-end; }
+
+  /* ===== 保存などの結果（画面下に一時的に出す） ===== */
+  .status {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    background: #222;
+    color: #fff;
+    font-size: 14px;
+    padding: 8px 16px;
+    border-radius: 999px;
+    z-index: 30;
+    pointer-events: none;
+  }
+  .status:empty { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>フィッシュボーン図メーカー</h1>
+  <span class="hint">図の文字をクリックすると入力できます</span>
+  <div class="menu">
+    <button class="primary" id="menuButton" aria-haspopup="true" aria-expanded="false">メニュー ▾</button>
+    <div class="menu-list" id="menuList" role="menu">
+      <div class="menu-heading">配色</div>
+      <div id="themeItems"></div>
+      <div class="menu-separator"></div>
+      <button role="menuitem" id="exportPng">画像にエクスポート（PNG）</button>
+      <button role="menuitem" id="exportPdf">PDFにエクスポート（A4横）</button>
+      <div class="menu-separator"></div>
+      <button role="menuitem" id="saveDataFile">ファイルに保存</button>
+      <button role="menuitem" id="openDataFile">ファイルを開く</button>
+      <div class="menu-separator"></div>
+      <button role="menuitem" class="danger" id="reset">リセット</button>
+    </div>
+  </div>
+  <input type="file" id="fileInput" accept=".json,.txt,application/json,text/plain" hidden>
+</header>
+
+<main>
+  <section class="preview" id="preview">
+    <div class="canvas" id="canvas"></div>
+  </section>
+  <div class="zoom-controls">
+    <button id="zoomOut" title="縮小">−</button>
+    <span class="zoom-value" id="zoomValue">100%</span>
+    <button id="zoomIn" title="拡大">＋</button>
+    <button id="zoomFit" class="icon-only" title="画面に合わせる" aria-label="画面に合わせる">
+      <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
+        <path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+  </div>
+</main>
+
+<div class="modal-back" id="confirmBack">
+  <div class="modal">
+    <p id="confirmMessage"></p>
+    <div class="modal-buttons">
+      <button id="confirmNo">やめる</button>
+      <button class="danger" id="confirmYes">OK</button>
+    </div>
+  </div>
+</div>
+
+<div class="status" id="status"></div>
+
+<script>
+// =====================================================================
+//  フィッシュボーン図メーカー
+//
+//  データの形（ブラウザへの自動保存・ファイル保存とも同じ）
+//    {
+//      head:  "問題（結果）の文字",
+//      theme: "navy" | "green" | "orange" | "mono",
+//      bones: [ { name: "要因の名前", smalls: ["小要因", ...] }, ... ]
+//    }
+//  bones[0] が要因1。要因1・2が頭のすぐ左に来て、奇数が上・偶数が下に並ぶ。
+// =====================================================================
+
+// ===== 1. 設定 =====
+
+// 数の上限・下限
+const MIN_BONES = 2;
+const MAX_BONES = 10;
+const MAX_SMALLS = 6;
+
+// ブラウザに自動保存するときの名前
+const STORAGE_KEY = "fishbone-maker-v1";
+// 保存ファイルの種類を表す名前
+const SAVE_FILE_TYPE = "fishbone-maker";
+
+// 図の文字と色
+const FONT = '"Meiryo UI", "Meiryo", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif';
+const LINE_COLOR = "#333333";
+const DANGER_COLOR = "#B3261E";
+const PLACEHOLDER_COLOR = "#A8B4C0";
+
+// 配色プリセット
+//   headFill / headText / headStroke：問題（頭）の塗り・文字・枠線
+//   accent：大骨の名前の枠と文字、「＋」ボタン
+const THEMES = {
+  navy:   { label: "ネイビー", headFill: "#1F4E79", headText: "#FFFFFF", headStroke: "none",    accent: "#1F4E79" },
+  green:  { label: "グリーン", headFill: "#2C5F2D", headText: "#FFFFFF", headStroke: "none",    accent: "#2C5F2D" },
+  orange: { label: "オレンジ", headFill: "#B85042", headText: "#FFFFFF", headStroke: "none",    accent: "#A2412F" },
+  mono:   { label: "モノクロ", headFill: "#FFFFFF", headText: "#222222", headStroke: "#222222", accent: "#222222" }
+};
+const DEFAULT_THEME = "navy";
+
+// 図の大きさ（単位は図の中のピクセル。画面ではこれを拡大・縮小して表示する）
+const PADDING = 30;             // 図のまわりの余白
+const SMALL_LENGTH = 180;       // 小骨の長さ
+const SMALL_GAP = 64;           // 小骨どうしの最小の間隔（「−」ボタンの分も含む）
+const END_GAP = 76;             // 大骨の名前の枠の近くは「＋」ボタンのために小骨を置かない
+const SMALL_TEXT_HEIGHT = 38;   // 小骨の文字をクリックできる範囲の高さ
+const MIN_BONE_HEIGHT = 190;    // 大骨の縦の長さ（最小）
+const BONE_LEAN = 0.6;          // 大骨の傾き（横の長さ ÷ 縦の長さ）
+const COLUMN_GAP = SMALL_LENGTH + 60;  // 大骨どうしの横の間隔
+const LABEL_WIDTH = 176;        // 大骨の名前の枠の幅（15pxの太字で1行10文字・2行で20文字ほど）
+const LABEL_ROOM = 64;          // 大骨の名前の枠のために上下に空けておく高さ
+const HEAD_WIDTH = 190;         // 問題（頭）の枠の幅
+
+// 文字の大きさの段階：長い文字は、収まるまで順に小さくする
+//   問題（頭）：20文字ほどまでは18px
+const HEAD_FONT_STEPS = [
+  { size: 18, lineHeight: 26, maxLines: 3 },
+  { size: 16, lineHeight: 22, maxLines: 4 },
+  { size: 14, lineHeight: 19, maxLines: 5 },
+  { size: 13, lineHeight: 17, maxLines: 6 }
+];
+//   大骨の名前：20文字ほどまでは15pxで2行
+const LABEL_FONT_STEPS = [
+  { size: 15, lineHeight: 19, maxLines: 2 },
+  { size: 14, lineHeight: 18, maxLines: 2 },
+  { size: 13, lineHeight: 16, maxLines: 2 },
+  { size: 12, lineHeight: 15, maxLines: 3 },
+  { size: 11, lineHeight: 14, maxLines: 3 }
+];
+//   小骨：20文字ほどまでは14pxで2行
+const SMALL_FONT_STEPS = [
+  { size: 14, lineHeight: 18, maxLines: 2 },
+  { size: 13, lineHeight: 16, maxLines: 2 },
+  { size: 12, lineHeight: 15, maxLines: 2 },
+  { size: 11, lineHeight: 13, maxLines: 3 }
+];
+
+// 表示の拡大・縮小
+const MIN_ZOOM = 0.3;
+const MAX_ZOOM = 2.5;
+const MIN_FIT_ZOOM = 0.55;   // 画面に合わせるときも、これより小さくはしない（文字が読めなくなるため）
+const MAX_FIT_ZOOM = 1.3;    // 大きな画面で必要以上に大きくしない
+
+// PDF（A4横・単位はポイント）
+const A4_LANDSCAPE = { width: 841.89, height: 595.28 };
+const PDF_MARGIN = 28;
+
+// 画面の部品
+const previewElement = document.getElementById("preview");
+const canvasElement = document.getElementById("canvas");
+
+
+// ===== 2. データ =====
+
+function createDefaultData(theme = DEFAULT_THEME) {
+  return {
+    head: "",
+    theme: theme,
+    bones: [1, 2, 3, 4].map(() => ({ name: "", smalls: ["", "", ""] }))
+  };
+}
+
+// 読み込んだデータが正しい形か確かめて、使える形に整える（だめなら null）
+function sanitizeData(source) {
+  if (!source || typeof source !== "object" || !Array.isArray(source.bones)) return null;
+  const bones = source.bones.slice(0, MAX_BONES).map(bone => {
+    if (!bone || typeof bone !== "object") return null;
+    const smalls = Array.isArray(bone.smalls) ? bone.smalls.slice(0, MAX_SMALLS).map(String) : [];
+    return {
+      name: typeof bone.name === "string" ? bone.name : "",
+      smalls: smalls.length > 0 ? smalls : [""]
+    };
+  });
+  if (bones.length < MIN_BONES || bones.includes(null)) return null;
+  return {
+    head: typeof source.head === "string" ? source.head : "",
+    theme: THEMES[source.theme] ? source.theme : DEFAULT_THEME,
+    bones: bones
+  };
+}
+
+// ブラウザに自動保存した内容を読む（なければ初期データ）
+function loadFromBrowser() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    const cleaned = saved ? sanitizeData(JSON.parse(saved)) : null;
+    if (cleaned) return cleaned;
+  } catch (error) {
+    // 保存が使えない環境では、そのまま初期データで動かす
+  }
+  return createDefaultData();
+}
+
+function saveToBrowser() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch (error) {
+    // 保存できなくても動作は続ける
+  }
+}
+
+let data = loadFromBrowser();
+
+function currentTheme() {
+  return THEMES[data.theme] || THEMES[DEFAULT_THEME];
+}
+
+// データを変えたら必ずこれを呼ぶ：ブラウザに保存して、図を描き直す
+function saveAndRender() {
+  saveToBrowser();
+  renderPreview();
+}
+
+
+// ===== 3. 文字の折り返しと縮小 =====
+
+const measureContext = document.createElement("canvas").getContext("2d");
+
+// 幅に収まるように1文字ずつ折り返す。maxLines を超えた分は最後を「…」にする
+function wrapText(text, fontSize, bold, maxWidth, maxLines) {
+  measureContext.font = `${bold ? "bold " : ""}${fontSize}px ${FONT}`;
+  const lines = [];
+  let current = "";
+  for (const char of text) {
+    const next = current + char;
+    if (measureContext.measureText(next).width > maxWidth && current !== "") {
+      lines.push(current);
+      current = char;
+    } else {
+      current = next;
+    }
+  }
+  if (current !== "") lines.push(current);
+  if (lines.length <= maxLines) return lines;
+
+  const kept = lines.slice(0, maxLines);
+  let last = kept[maxLines - 1];
+  while (last.length > 0 && measureContext.measureText(last + "…").width > maxWidth) {
+    last = last.slice(0, -1);
+  }
+  kept[maxLines - 1] = last + "…";
+  return kept;
+}
+
+// 長い文字は、収まるまで段階的に小さくする（いちばん小さくしても収まらなければ最後を「…」）
+// 戻り値：{ size, lineHeight, maxLines, lines }
+function fitText(text, steps, bold, maxWidth) {
+  for (const step of steps) {
+    const lines = wrapText(text, step.size, bold, maxWidth, Infinity);
+    if (lines.length <= step.maxLines) return { ...step, lines };
+  }
+  const smallest = steps[steps.length - 1];
+  return { ...smallest, lines: wrapText(text, smallest.size, bold, maxWidth, smallest.maxLines) };
+}
+
+
+// ===== 4. SVGの部品 =====
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+function svgElement(tag, attributes) {
+  const element = document.createElementNS(SVG_NS, tag);
+  for (const [key, value] of Object.entries(attributes)) {
+    element.setAttribute(key, value);
+  }
+  return element;
+}
+
+// 複数行の文字（firstBaseline は1行目の文字の下端の位置）
+function addTextLines(parent, lines, x, firstBaseline, lineHeight, options) {
+  const text = svgElement("text", {
+    x: x,
+    y: firstBaseline,
+    "font-family": FONT,
+    "font-size": options.size,
+    "font-weight": options.bold ? "bold" : "normal",
+    fill: options.color,
+    "text-anchor": options.anchor || "start"
+  });
+  lines.forEach((line, index) => {
+    const span = svgElement("tspan", { x: x, dy: index === 0 ? 0 : lineHeight });
+    span.textContent = line;
+    text.appendChild(span);
+  });
+  parent.appendChild(text);
+}
+
+// 丸いボタン。symbol は "plus"（＋）・"minus"（−）・"cross"（×）
+function addRoundButton(parent, x, y, radius, symbol, color, title, onClick) {
+  const group = svgElement("g", { class: "ui-button" });
+  const tooltip = svgElement("title", {});
+  tooltip.textContent = title;
+  group.appendChild(tooltip);
+  group.appendChild(svgElement("circle", { cx: x, cy: y, r: radius, fill: "#FFFFFF", stroke: color, "stroke-width": 1.6 }));
+  // 押しやすいよう、見た目より少し広い透明な当たり判定をつける
+  group.appendChild(svgElement("circle", { cx: x, cy: y, r: radius + 4, fill: "transparent" }));
+
+  const half = radius * 0.5;
+  const strokes = [[-half, 0, half, 0]];                     // 横棒（−）
+  if (symbol === "plus") strokes.push([0, -half, 0, half]);  // 縦棒を足して＋
+  const rotate = symbol === "cross" ? `rotate(45 ${x} ${y})` : "";
+  if (symbol === "cross") strokes.push([0, -half, 0, half]); // ＋を45度回して×
+  for (const [x1, y1, x2, y2] of strokes) {
+    group.appendChild(svgElement("line", {
+      x1: x + x1, y1: y + y1, x2: x + x2, y2: y + y2,
+      stroke: color, "stroke-width": 2, "stroke-linecap": "round", transform: rotate
+    }));
+  }
+
+  group.addEventListener("click", event => {
+    event.stopPropagation();
+    if (activeEditor) closeEditor(true);
+    onClick();
+  });
+  parent.appendChild(group);
+}
+
+// クリックすると入力できる範囲（マウスを乗せると点線の枠が出る）
+function addEditableArea(parent, key, x, y, width, height) {
+  const group = svgElement("g", { class: "editable", "data-key": key });
+  group.appendChild(svgElement("rect", {
+    class: "hover-frame",
+    x: x, y: y, width: width, height: height, rx: 6,
+    fill: "transparent", stroke: "none", "stroke-width": 1.5, "stroke-dasharray": "4 3"
+  }));
+  group.addEventListener("click", event => {
+    event.stopPropagation();
+    openEditor(key);
+  });
+  parent.appendChild(group);
+}
+
+
+// ===== 5. 図を描く =====
+
+// 図全体の大きさと、背骨・各大骨の位置を計算する
+function calculateLayout() {
+  const columnCount = Math.ceil(data.bones.length / 2);
+  const maxSmalls = Math.max(1, ...data.bones.map(bone => bone.smalls.length));
+
+  const boneHeight = Math.max(MIN_BONE_HEIGHT, END_GAP + maxSmalls * SMALL_GAP);
+  const boneLean = boneHeight * BONE_LEAN;
+  // いちばん左の大骨の左側に必要な幅（名前の枠と、いちばん外側の小骨のどちらか大きい方）
+  const leftExtent = Math.max(
+    boneLean + LABEL_WIDTH / 2,
+    boneLean * (1 - END_GAP / boneHeight) + SMALL_LENGTH
+  );
+  const firstAttachX = PADDING + leftExtent;
+  const headX = firstAttachX + (columnCount - 1) * COLUMN_GAP + 70;
+  const spineY = PADDING + LABEL_ROOM + boneHeight;
+
+  return {
+    columnCount, boneHeight, boneLean, firstAttachX, headX, spineY,
+    width: headX + HEAD_WIDTH + PADDING,
+    height: spineY + boneHeight + LABEL_ROOM + PADDING
+  };
+}
+
+// editMode が true のときは、ボタン・案内文字・クリック範囲も描く（画面表示用）
+// false のときは図だけを描く（PNG・PDF用）
+function buildSvg(editMode) {
+  const layout = calculateLayout();
+  const theme = currentTheme();
+
+  const svg = svgElement("svg", {
+    xmlns: SVG_NS,
+    viewBox: `0 0 ${layout.width} ${layout.height}`,
+    width: layout.width,
+    height: layout.height
+  });
+  svg.appendChild(svgElement("rect", { x: 0, y: 0, width: layout.width, height: layout.height, fill: "#FFFFFF" }));
+
+  drawSpineAndHead(svg, layout, theme, editMode);
+  data.bones.forEach((bone, boneIndex) => drawBone(svg, layout, theme, editMode, bone, boneIndex));
+  return svg;
+}
+
+// 背骨・矢印・問題（頭）・「＋ 大骨を追加」ボタン
+function drawSpineAndHead(svg, layout, theme, editMode) {
+  const { headX, spineY } = layout;
+
+  svg.appendChild(svgElement("line", {
+    x1: PADDING, y1: spineY, x2: headX - 14, y2: spineY,
+    stroke: LINE_COLOR, "stroke-width": 5
+  }));
+  svg.appendChild(svgElement("polygon", {
+    points: `${headX - 2},${spineY} ${headX - 20},${spineY - 9} ${headX - 20},${spineY + 9}`,
+    fill: LINE_COLOR
+  }));
+
+  const head = fitText(data.head.trim() || "問題（結果）", HEAD_FONT_STEPS, true, HEAD_WIDTH - 28);
+  const headHeight = Math.max(110, head.lines.length * head.lineHeight + 34);
+  const headTop = spineY - headHeight / 2;
+  svg.appendChild(svgElement("rect", {
+    x: headX, y: headTop, width: HEAD_WIDTH, height: headHeight,
+    rx: 14, fill: theme.headFill, stroke: theme.headStroke, "stroke-width": 2.5
+  }));
+  addTextLines(svg, head.lines, headX + HEAD_WIDTH / 2,
+    spineY - (head.lines.length - 1) * head.lineHeight / 2 + head.size / 3, head.lineHeight,
+    { size: head.size, bold: true, color: theme.headText, anchor: "middle" });
+
+  if (!editMode) return;
+  addEditableArea(svg, "head", headX, headTop, HEAD_WIDTH, headHeight);
+
+  if (data.bones.length < MAX_BONES) {
+    const buttonWidth = 112;
+    const buttonHeight = 26;
+    const buttonY = spineY + headHeight / 2 + 14;
+    const group = svgElement("g", { class: "ui-button" });
+    group.appendChild(svgElement("rect", {
+      x: headX + (HEAD_WIDTH - buttonWidth) / 2, y: buttonY,
+      width: buttonWidth, height: buttonHeight, rx: buttonHeight / 2,
+      fill: "#FFFFFF", stroke: theme.accent, "stroke-width": 1.6
+    }));
+    addTextLines(group, ["＋ 大骨を追加"], headX + HEAD_WIDTH / 2, buttonY + 18, 0,
+      { size: 13, bold: true, color: theme.accent, anchor: "middle" });
+    group.addEventListener("click", event => {
+      event.stopPropagation();
+      if (activeEditor) closeEditor(true);
+      data.bones.push({ name: "", smalls: ["", "", ""] });
+      saveAndRender();
+    });
+    svg.appendChild(group);
+  }
+}
+
+// 大骨1本（線・名前の枠・小骨・ボタン）
+function drawBone(svg, layout, theme, editMode, bone, boneIndex) {
+  const { columnCount, boneHeight, boneLean, firstAttachX, spineY } = layout;
+
+  // 要因1が頭のすぐ左に来るよう、頭の側から順に並べる。奇数番が上、偶数番が下
+  const column = columnCount - 1 - Math.floor(boneIndex / 2);
+  const isTop = boneIndex % 2 === 0;
+  const direction = isTop ? -1 : 1;
+  const attachX = firstAttachX + column * COLUMN_GAP;  // 背骨とつながる点
+  const endX = attachX - boneLean;                     // 名前の枠側の端
+  const endY = spineY + direction * boneHeight;
+
+  svg.appendChild(svgElement("line", {
+    x1: endX, y1: endY, x2: attachX, y2: spineY,
+    stroke: LINE_COLOR, "stroke-width": 3
+  }));
+
+  // 名前の枠
+  const label = fitText(bone.name.trim() || `要因${boneIndex + 1}`, LABEL_FONT_STEPS, true, LABEL_WIDTH - 20);
+  const labelHeight = label.lines.length * label.lineHeight + 18;
+  const labelX = endX - LABEL_WIDTH / 2;
+  const labelY = isTop ? endY - labelHeight - 4 : endY + 4;
+  svg.appendChild(svgElement("rect", {
+    x: labelX, y: labelY, width: LABEL_WIDTH, height: labelHeight,
+    rx: 8, fill: "#FFFFFF", stroke: theme.accent, "stroke-width": 2
+  }));
+  addTextLines(svg, label.lines, endX, labelY + 9 + label.size - 1, label.lineHeight,
+    { size: label.size, bold: true, color: theme.accent, anchor: "middle" });
+
+  if (editMode) {
+    addEditableArea(svg, `bone-${boneIndex}`, labelX, labelY, LABEL_WIDTH, labelHeight);
+
+    // 小骨を増やす「＋」：大骨と名前の枠がつながるところの左側（尻尾側）。
+    // このあたりには小骨を置かないので、押し間違えにくい
+    if (bone.smalls.length < MAX_SMALLS) {
+      addRoundButton(svg, endX - 22, endY - direction * 20, 9, "plus", theme.accent, "小骨を追加", () => {
+        bone.smalls.push("");
+        saveAndRender();
+        openEditor(`small-${boneIndex}-${bone.smalls.length - 1}`);
+      });
+    }
+    // 大骨を消す「×」：名前の枠の右上
+    if (data.bones.length > MIN_BONES) {
+      addRoundButton(svg, labelX + LABEL_WIDTH - 2, labelY + 2, 8, "cross", DANGER_COLOR, "この大骨を削除", () => {
+        const name = bone.name.trim() || `要因${boneIndex + 1}`;
+        askConfirm(`大骨「${name}」と、その小骨をすべて削除しますか？`, () => {
+          data.bones.splice(boneIndex, 1);
+          saveAndRender();
+        });
+      });
+    }
+  }
+
+  // 小骨：名前の枠の近く（END_GAP）を空けて、残りの長さに等間隔で並べる。
+  // 入力の順番が、図でも上から順になるようにする
+  const count = bone.smalls.length;
+  const step = (boneHeight - END_GAP) / count;
+  bone.smalls.forEach((small, smallIndex) => {
+    const orderFromEnd = isTop ? smallIndex : count - 1 - smallIndex;
+    const ratio = 1 - (END_GAP + orderFromEnd * step) / boneHeight;  // 背骨からの割合
+    const pointX = attachX - boneLean * ratio;  // 大骨とつながる点
+    const pointY = spineY + direction * boneHeight * ratio;
+    const lineStartX = pointX - SMALL_LENGTH;
+
+    svg.appendChild(svgElement("line", {
+      x1: lineStartX, y1: pointY, x2: pointX, y2: pointY,
+      stroke: LINE_COLOR, "stroke-width": 1.6
+    }));
+
+    // 上側の大骨は、文字の右端に大骨の線が重ならないよう幅を狭める
+    const textWidth = isTop ? SMALL_LENGTH - 40 : SMALL_LENGTH - 12;
+    const text = small.trim();
+    if (text !== "") {
+      const fitted = fitText(text, SMALL_FONT_STEPS, false, textWidth);
+      addTextLines(svg, fitted.lines, lineStartX, pointY - 6 - (fitted.lines.length - 1) * fitted.lineHeight,
+        fitted.lineHeight, { size: fitted.size, bold: false, color: LINE_COLOR });
+    } else if (editMode) {
+      addTextLines(svg, ["クリックして入力"], lineStartX, pointY - 6, 0,
+        { size: 13, bold: false, color: PLACEHOLDER_COLOR });
+    }
+
+    if (!editMode) return;
+    // クリック範囲は線の上側。上側・下側どちらの大骨でも同じ大きさにする
+    addEditableArea(svg, `small-${boneIndex}-${smallIndex}`,
+      lineStartX, pointY - SMALL_TEXT_HEIGHT - 2, SMALL_LENGTH - 8, SMALL_TEXT_HEIGHT);
+    // 小骨を消す「−」：線の左端の下（文字のクリック範囲とは線をはさんで反対側）
+    if (count > 1) {
+      addRoundButton(svg, lineStartX + 10, pointY + 14, 8, "minus", DANGER_COLOR, "この小骨を削除", () => {
+        bone.smalls.splice(smallIndex, 1);
+        saveAndRender();
+      });
+    }
+  });
+}
+
+
+// ===== 6. 画面への表示（拡大・縮小・移動） =====
+
+let zoom = 1;
+let fitMode = true;   // true の間は、ウィンドウや図の大きさが変わるたびに画面に合わせ直す
+
+function renderPreview() {
+  canvasElement.querySelectorAll("svg").forEach(element => element.remove());
+  const svg = buildSvg(true);
+  // 図をクリックしても入力欄からフォーカスが外れないようにする
+  // （外れると図が描き直され、押したボタンが反応しなくなるため）
+  svg.addEventListener("mousedown", event => event.preventDefault());
+  // 何もないところをクリックしたら入力を確定する（ドラッグで動かしたときは何もしない）
+  svg.addEventListener("click", () => {
+    if (panMoved) { panMoved = false; return; }
+    if (activeEditor) closeEditor(true);
+  });
+  canvasElement.appendChild(svg);
+  applyZoom(svg);
+}
+
+function calculateFitZoom(svgWidth, svgHeight) {
+  const availableWidth = previewElement.clientWidth - 20;   // 20 は .preview の上下・左右の余白
+  const availableHeight = previewElement.clientHeight - 20;
+  const fit = Math.min(availableWidth / svgWidth, availableHeight / svgHeight);
+  return Math.min(MAX_FIT_ZOOM, Math.max(MIN_FIT_ZOOM, fit));
+}
+
+function applyZoom(svg) {
+  const width = Number(svg.getAttribute("width"));
+  const height = Number(svg.getAttribute("height"));
+  if (fitMode) zoom = calculateFitZoom(width, height);
+  svg.style.width = `${width * zoom}px`;
+  svg.style.height = `${height * zoom}px`;
+  document.getElementById("zoomValue").textContent = `${Math.round(zoom * 100)}%`;
+  const overflowing = previewElement.scrollWidth > previewElement.clientWidth ||
+                      previewElement.scrollHeight > previewElement.clientHeight;
+  previewElement.classList.toggle("can-pan", overflowing);
+}
+
+// 指定した点（画面上の座標。省略すると表示部分の中央）を中心に拡大・縮小する
+function setZoom(newZoom, centerX, centerY) {
+  if (activeEditor) closeEditor(true);
+  const svg = canvasElement.querySelector("svg");
+  if (!svg) return;
+  const previewBox = previewElement.getBoundingClientRect();
+  if (centerX === undefined) centerX = previewBox.left + previewElement.clientWidth / 2;
+  if (centerY === undefined) centerY = previewBox.top + previewElement.clientHeight / 2;
+
+  // 中心にある点が、図の中のどこ（割合）にあたるかを覚えておく
+  const before = svg.getBoundingClientRect();
+  const ratioX = (centerX - before.left) / before.width;
+  const ratioY = (centerY - before.top) / before.height;
+
+  fitMode = false;
+  zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, newZoom));
+  applyZoom(svg);
+
+  // 拡大・縮小の後も、同じ点が同じ位置に来るようにスクロールする
+  const after = svg.getBoundingClientRect();
+  previewElement.scrollLeft += (after.left + ratioX * after.width) - centerX;
+  previewElement.scrollTop += (after.top + ratioY * after.height) - centerY;
+}
+
+function fitToScreen() {
+  if (activeEditor) closeEditor(true);
+  fitMode = true;
+  renderPreview();
+}
+
+document.getElementById("zoomIn").addEventListener("click", () => setZoom(zoom * 1.2));
+document.getElementById("zoomOut").addEventListener("click", () => setZoom(zoom / 1.2));
+document.getElementById("zoomFit").addEventListener("click", fitToScreen);
+
+// Ctrl + マウスホイールで拡大・縮小
+previewElement.addEventListener("wheel", event => {
+  if (!event.ctrlKey) return;
+  event.preventDefault();
+  setZoom(zoom * (event.deltaY < 0 ? 1.1 : 1 / 1.1), event.clientX, event.clientY);
+}, { passive: false });
+
+// 何もないところをドラッグして図を動かす（図がはみ出しているときだけ）
+let panStart = null;
+let panMoved = false;
+
+previewElement.addEventListener("mousedown", event => {
+  if (event.button !== 0) return;
+  if (event.target.closest(".editable, .ui-button, .inline-editor")) return;
+  if (!previewElement.classList.contains("can-pan")) return;
+  panStart = { x: event.clientX, y: event.clientY, left: previewElement.scrollLeft, top: previewElement.scrollTop };
+  panMoved = false;
+});
+window.addEventListener("mousemove", event => {
+  if (!panStart) return;
+  const dx = event.clientX - panStart.x;
+  const dy = event.clientY - panStart.y;
+  if (!panMoved && Math.abs(dx) + Math.abs(dy) > 4) {
+    panMoved = true;
+    previewElement.classList.add("panning");
+    if (activeEditor) closeEditor(true);
+  }
+  if (panMoved) {
+    previewElement.scrollLeft = panStart.left - dx;
+    previewElement.scrollTop = panStart.top - dy;
+  }
+});
+window.addEventListener("mouseup", () => {
+  if (!panStart) return;
+  panStart = null;
+  previewElement.classList.remove("panning");
+});
+
+window.addEventListener("resize", () => {
+  if (activeEditor) closeEditor(true);
+  if (fitMode) renderPreview();
+});
+
+
+// ===== 7. 図の上で直接入力する =====
+//  入力する場所は key で表す："head"（問題）・"bone-0"（要因1の名前）・"small-0-2"（要因1の3つ目の小骨）
+
+let activeEditor = null;   // 入力中のとき { input, key, autoAdded }
+
+function getValue(key) {
+  if (key === "head") return data.head;
+  const [kind, boneIndex, smallIndex] = key.split("-");
+  const bone = data.bones[Number(boneIndex)];
+  if (!bone) return null;
+  if (kind === "bone") return bone.name;
+  const value = bone.smalls[Number(smallIndex)];
+  return value === undefined ? null : value;
+}
+
+function setValue(key, value) {
+  if (key === "head") { data.head = value; return; }
+  const [kind, boneIndex, smallIndex] = key.split("-");
+  const bone = data.bones[Number(boneIndex)];
+  if (!bone) return;
+  if (kind === "bone") bone.name = value;
+  else bone.smalls[Number(smallIndex)] = value;
+}
+
+function openEditor(key, autoAdded = false) {
+  if (activeEditor) closeEditor(true);
+  const value = getValue(key);
+  const area = canvasElement.querySelector(`[data-key="${key}"] rect`);
+  const svg = canvasElement.querySelector("svg");
+  if (value === null || !area || !svg) return;
+
+  const canvasBox = canvasElement.getBoundingClientRect();
+  const areaBox = area.getBoundingClientRect();
+  const scale = svg.getBoundingClientRect().width / Number(svg.getAttribute("width"));
+  const baseFontSize = key === "head" ? 18 : key.startsWith("bone") ? 15 : 14;
+
+  // 入力欄は、マウスを乗せたときに出る点線の枠とぴったり同じ位置・大きさにする。
+  // 位置は図（canvas）の左上が基準なので、スクロールしても図と一緒に動く
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "inline-editor";
+  input.value = value;
+  input.placeholder = key === "head" ? "問題（結果）" : key.startsWith("bone") ? "要因の名前" : "小要因";
+  input.style.fontSize = `${Math.max(11, baseFontSize * scale)}px`;
+  input.style.left = `${areaBox.left - canvasBox.left}px`;
+  input.style.top = `${areaBox.top - canvasBox.top}px`;
+  input.style.width = `${areaBox.width}px`;
+  input.style.height = `${areaBox.height}px`;
+  canvasElement.appendChild(input);
+  activeEditor = { input, key, autoAdded };
+
+  input.addEventListener("keydown", event => {
+    if (event.isComposing || event.keyCode === 229) return; // 日本語の変換中は何もしない
+    if (event.key === "Enter") {
+      // 確定して、小骨なら次の小骨へ（空のまま Enter なら入力を終える）
+      event.preventDefault();
+      setValue(key, input.value);
+      const next = input.value.trim() === "" ? null : nextSmallTarget(key);
+      closeEditor(false);
+      if (next) openEditor(next.key, next.autoAdded);
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      closeEditor(false);
+    }
+  });
+  input.addEventListener("blur", () => {
+    if (activeEditor && activeEditor.input === input) closeEditor(true);
+  });
+  input.focus();
+  input.select();
+}
+
+// commit が true なら入力内容を反映してから閉じる
+function closeEditor(commit) {
+  if (!activeEditor) return;
+  const { input, key, autoAdded } = activeEditor;
+  activeEditor = null;
+  if (commit) setValue(key, input.value);
+
+  // Enter で自動的に足した小骨が空のままなら消す
+  const value = getValue(key);
+  if (autoAdded && (value === null || value.trim() === "")) {
+    const [, boneIndex, smallIndex] = key.split("-");
+    const bone = data.bones[Number(boneIndex)];
+    if (bone && bone.smalls.length > 1) bone.smalls.splice(Number(smallIndex), 1);
+  }
+  input.remove();
+  saveAndRender();
+}
+
+// 小骨の入力中に Enter を押したときの次の行き先。最後の小骨なら小骨を1本足す
+function nextSmallTarget(key) {
+  const [kind, boneIndexText, smallIndexText] = key.split("-");
+  if (kind !== "small") return null;
+  const boneIndex = Number(boneIndexText);
+  const nextIndex = Number(smallIndexText) + 1;
+  const bone = data.bones[boneIndex];
+  if (nextIndex < bone.smalls.length) {
+    return { key: `small-${boneIndex}-${nextIndex}`, autoAdded: false };
+  }
+  if (bone.smalls.length < MAX_SMALLS) {
+    bone.smalls.push("");
+    return { key: `small-${boneIndex}-${nextIndex}`, autoAdded: true };
+  }
+  return null;
+}
+
+
+// ===== 8. 確認画面 =====
+
+const confirmBack = document.getElementById("confirmBack");
+let confirmAction = null;
+
+function askConfirm(message, onYes) {
+  document.getElementById("confirmMessage").textContent = message;
+  confirmAction = onYes;
+  confirmBack.classList.add("show");
+}
+
+document.getElementById("confirmNo").addEventListener("click", () => {
+  confirmAction = null;
+  confirmBack.classList.remove("show");
+});
+document.getElementById("confirmYes").addEventListener("click", () => {
+  confirmBack.classList.remove("show");
+  if (confirmAction) confirmAction();
+  confirmAction = null;
+});
+
+
+// ===== 9. メッセージ表示とダウンロード =====
+
+function showStatus(message) {
+  const status = document.getElementById("status");
+  status.textContent = message;
+  clearTimeout(showStatus.timer);
+  showStatus.timer = setTimeout(() => { status.textContent = ""; }, 4000);
+}
+
+// ファイル名：「フィッシュボーン図_問題の文字.拡張子」
+function makeFileName(extension) {
+  const title = data.head.trim().replace(/[\\/:*?"<>|]/g, "").slice(0, 30);
+  return `フィッシュボーン図${title ? "_" + title : ""}.${extension}`;
+}
+
+// Claude のページ上で開いたときは、その保存機能を使う（それ以外は普通のダウンロード）
+let claudeDownloads = null;
+if (window.claude && typeof window.claude.use === "function") {
+  window.claude.use("downloads").then(api => { claudeDownloads = api; }).catch(() => {});
+}
+
+async function downloadFile(fileName, blob) {
+  if (claudeDownloads) {
+    try {
+      await claudeDownloads.save({ filename: fileName, data: blob });
+      showStatus("保存しました");
+    } catch (error) {
+      showStatus(error && error.code === "declined" ? "保存をキャンセルしました" : "この画面では保存できませんでした");
+    }
+    return;
+  }
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+
+// ===== 10. 書き出し（PNG・PDF） =====
+
+// 図（ボタンなし）を画像としてキャンバスに描く
+function renderDiagramToCanvas(scale) {
+  return new Promise((resolve, reject) => {
+    const svg = buildSvg(false);
+    const width = Number(svg.getAttribute("width"));
+    const height = Number(svg.getAttribute("height"));
+    const image = new Image();
+    image.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(width * scale);
+      canvas.height = Math.round(height * scale);
+      const context = canvas.getContext("2d");
+      context.fillStyle = "#FFFFFF";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      resolve(canvas);
+    };
+    image.onerror = reject;
+    image.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(new XMLSerializer().serializeToString(svg));
+  });
+}
+
+function canvasToBlob(canvas, type, quality) {
+  return new Promise(resolve => canvas.toBlob(resolve, type, quality));
+}
+
+async function exportPng() {
+  if (activeEditor) closeEditor(true);
+  try {
+    const canvas = await renderDiagramToCanvas(2);
+    downloadFile(makeFileName("png"), await canvasToBlob(canvas, "image/png"));
+  } catch (error) {
+    showStatus("PNGを作れませんでした");
+  }
+}
+
+async function exportPdf() {
+  if (activeEditor) closeEditor(true);
+  try {
+    const canvas = await renderDiagramToCanvas(3); // 印刷してもきれいなように高めの解像度で
+    const jpeg = await canvasToBlob(canvas, "image/jpeg", 0.92);
+    const jpegBytes = new Uint8Array(await jpeg.arrayBuffer());
+    downloadFile(makeFileName("pdf"), buildPdf(jpegBytes, canvas.width, canvas.height));
+  } catch (error) {
+    showStatus("PDFを作れませんでした");
+  }
+}
+
+// 外部ライブラリを使わず、JPEG画像1枚をA4横1ページの中央に置いたPDFを作る
+function buildPdf(jpegBytes, imageWidth, imageHeight) {
+  const fitScale = Math.min(
+    (A4_LANDSCAPE.width - PDF_MARGIN * 2) / imageWidth,
+    (A4_LANDSCAPE.height - PDF_MARGIN * 2) / imageHeight
+  );
+  const drawWidth = imageWidth * fitScale;
+  const drawHeight = imageHeight * fitScale;
+  const drawX = (A4_LANDSCAPE.width - drawWidth) / 2;
+  const drawY = (A4_LANDSCAPE.height - drawHeight) / 2;
+  const pageContents = `q ${drawWidth.toFixed(2)} 0 0 ${drawHeight.toFixed(2)} ${drawX.toFixed(2)} ${drawY.toFixed(2)} cm /Im0 Do Q`;
+
+  // PDFは「オブジェクト」を順に並べ、最後に各オブジェクトの位置（バイト数）の一覧を付ける
+  const encoder = new TextEncoder();
+  const parts = [];
+  const objectOffsets = [];
+  let byteLength = 0;
+  const write = part => {
+    const bytes = typeof part === "string" ? encoder.encode(part) : part;
+    parts.push(bytes);
+    byteLength += bytes.length;
+  };
+  const writeObject = (number, ...contents) => {
+    objectOffsets[number] = byteLength;
+    write(`${number} 0 obj\n`);
+    contents.forEach(write);
+    write("\nendobj\n");
+  };
+
+  write("%PDF-1.4\n");
+  writeObject(1, "<< /Type /Catalog /Pages 2 0 R >>");
+  writeObject(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+  writeObject(3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${A4_LANDSCAPE.width} ${A4_LANDSCAPE.height}] ` +
+                 "/Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>");
+  writeObject(4, `<< /Type /XObject /Subtype /Image /Width ${imageWidth} /Height ${imageHeight} ` +
+                 `/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.length} >>\nstream\n`,
+              jpegBytes, "\nendstream");
+  writeObject(5, `<< /Length ${pageContents.length} >>\nstream\n${pageContents}\nendstream`);
+
+  const xrefStart = byteLength;
+  let xref = "xref\n0 6\n0000000000 65535 f \n";
+  for (let number = 1; number <= 5; number++) {
+    xref += String(objectOffsets[number]).padStart(10, "0") + " 00000 n \n";
+  }
+  write(xref);
+  write(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF\n`);
+  return new Blob(parts, { type: "application/pdf" });
+}
+
+
+// ===== 11. ファイルに保存・ファイルを開く =====
+
+function saveDataFile() {
+  if (activeEditor) closeEditor(true);
+  const content = {
+    type: SAVE_FILE_TYPE,
+    version: 1,
+    savedAt: new Date().toISOString(),
+    head: data.head,
+    theme: data.theme,
+    bones: data.bones
+  };
+  downloadFile(makeFileName("json"), new Blob([JSON.stringify(content, null, 2)], { type: "application/json" }));
+}
+
+const fileInput = document.getElementById("fileInput");
+
+function openDataFile() {
+  if (activeEditor) closeEditor(true);
+  fileInput.value = "";
+  fileInput.click();
+}
+
+fileInput.addEventListener("change", () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    let loaded = null;
+    try {
+      loaded = sanitizeData(JSON.parse(reader.result));
+    } catch (error) {
+      loaded = null;
+    }
+    if (!loaded) {
+      showStatus("このファイルは読み込めませんでした");
+      return;
+    }
+    askConfirm("今の図をファイルの内容に置き換えます。よろしいですか？", () => {
+      data = loaded;
+      updateThemeChecks();
+      saveAndRender();
+      showStatus(`「${file.name}」を開きました`);
+    });
+  };
+  reader.onerror = () => showStatus("このファイルは読み込めませんでした");
+  reader.readAsText(file, "utf-8");
+});
+
+
+// ===== 12. メニュー =====
+
+const menuButton = document.getElementById("menuButton");
+const menuList = document.getElementById("menuList");
+const themeItems = document.getElementById("themeItems");
+
+// 配色の項目を作る
+for (const [themeKey, theme] of Object.entries(THEMES)) {
+  const item = document.createElement("button");
+  item.setAttribute("role", "menuitemradio");
+  item.className = "theme-item";
+  item.dataset.theme = themeKey;
+  const swatch = document.createElement("span");
+  swatch.className = "theme-swatch";
+  swatch.style.background = theme.headFill;
+  const name = document.createElement("span");
+  name.textContent = theme.label;
+  const check = document.createElement("span");
+  check.className = "theme-check";
+  check.textContent = "✓";
+  item.append(swatch, name, check);
+  item.addEventListener("click", () => {
+    data.theme = themeKey;
+    updateThemeChecks();
+    saveAndRender();
+  });
+  themeItems.appendChild(item);
+}
+
+// 今の配色にチェックを付ける
+function updateThemeChecks() {
+  const current = THEMES[data.theme] ? data.theme : DEFAULT_THEME;
+  themeItems.querySelectorAll(".theme-item").forEach(item => {
+    const selected = item.dataset.theme === current;
+    item.classList.toggle("selected", selected);
+    item.setAttribute("aria-checked", selected ? "true" : "false");
+  });
+}
+
+function resetDiagram() {
+  askConfirm("入力した内容をすべて消して、最初の状態に戻しますか？", () => {
+    data = createDefaultData(data.theme);
+    saveAndRender();
+  });
+}
+
+document.getElementById("exportPng").addEventListener("click", exportPng);
+document.getElementById("exportPdf").addEventListener("click", exportPdf);
+document.getElementById("saveDataFile").addEventListener("click", saveDataFile);
+document.getElementById("openDataFile").addEventListener("click", openDataFile);
+document.getElementById("reset").addEventListener("click", resetDiagram);
+
+// メニューの開け閉め
+function setMenuOpen(open) {
+  menuList.classList.toggle("show", open);
+  menuButton.setAttribute("aria-expanded", open ? "true" : "false");
+}
+menuButton.addEventListener("click", event => {
+  event.stopPropagation();
+  if (activeEditor) closeEditor(true);
+  setMenuOpen(!menuList.classList.contains("show"));
+});
+// 項目を選んだら閉じる
+menuList.querySelectorAll("button").forEach(item => {
+  item.addEventListener("click", () => setMenuOpen(false));
+});
+// メニューの外をクリックするか Esc で閉じる
+document.addEventListener("click", event => {
+  if (!event.target.closest(".menu")) setMenuOpen(false);
+});
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape") setMenuOpen(false);
+});
+
+
+// ===== 13. 最初の表示 =====
+updateThemeChecks();
+renderPreview();
+</script>
+</body>
+</html>
