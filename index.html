@@ -258,6 +258,73 @@
     pointer-events: none;
   }
   .status:empty { display: none; }
+
+/* ===== ゲーミングフィッシュボーン（隠し機能。コマンドで切り替え） ===== */
+@keyframes gaming-hue { from { filter: hue-rotate(0deg); } to { filter: hue-rotate(360deg); } }
+@keyframes gaming-glow {
+  from { filter: drop-shadow(0 0 3px #FF2D55) drop-shadow(0 0 7px rgba(255, 45, 85, 0.6)) hue-rotate(0deg); }
+  to   { filter: drop-shadow(0 0 3px #FF2D55) drop-shadow(0 0 7px rgba(255, 45, 85, 0.6)) hue-rotate(360deg); }
+}
+@keyframes gaming-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(255, 45, 85, 0.4), inset 0 0 16px rgba(255, 45, 85, 0.15); }
+  50%      { box-shadow: 0 0 16px rgba(0, 199, 255, 0.5), inset 0 0 24px rgba(0, 199, 255, 0.2); }
+}
+@keyframes gaming-slide { from { background-position: 0% 0, 0% 0; } to { background-position: 0% 0, 200% 0; } }
+@keyframes gaming-bg { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+/* 背景：虹色がゆっくり流れる */
+body.gaming {
+  background: linear-gradient(120deg, #4E0078, #002E9E, #00754A, #996E00, #99003A, #4E0078);
+  background-size: 400% 400%;
+  animation: gaming-bg 8s ease-in-out infinite;
+}
+body.gaming header { background: rgba(8, 8, 14, 0.55); border-bottom-color: rgba(255, 255, 255, 0.08); }
+body.gaming .hint { color: #8A8AA0; }
+/* タイトルの文字を虹色に */
+body.gaming header h1 { white-space: nowrap; }
+body.gaming header h1 .logo rect { fill: #FF2D55; }
+body.gaming header h1 .logo { animation: gaming-hue 2s linear infinite; }
+body.gaming header h1 span {
+  background: linear-gradient(90deg, #FF2D55, #FF9500, #FFE600, #34C759, #00C7FF, #5856D6, #FF2D55);
+  background-size: 200% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: gaming-slide 2s linear infinite;
+}
+/* 上のバーのボタンは虹色の枠 */
+body.gaming header button, body.gaming .help-button {
+  color: #FFFFFF; border: 1.5px solid transparent;
+  background:
+    linear-gradient(#14141F, #14141F) padding-box,
+    linear-gradient(90deg, #FF2D55, #FF9500, #FFE600, #34C759, #00C7FF, #5856D6, #FF2D55) border-box;
+  background-size: 100% 100%, 200% 100%;
+  animation: gaming-slide 2s linear infinite;
+}
+body.gaming .menu-list { background: #14141F; border-color: #2A2A3A; }
+body.gaming .menu-list button, body.gaming .menu-list .menu-link {
+  background: transparent; border: none; animation: none; color: #FFFFFF;
+}
+body.gaming .menu-list button:hover, body.gaming .menu-list .menu-link:hover { background: #23232F; }
+body.gaming .zoom-controls { background: #14141F; border-color: #2A2A3A; }
+body.gaming .zoom-controls button { background: transparent; color: #FFFFFF; animation: none; border: none; }
+/* 図：線と枠を1色にして、色相を回し続ける */
+body.gaming .preview {
+  background-color: rgba(8, 8, 14, 0.55);
+  background-image: radial-gradient(rgba(255, 255, 255, 0.12) 1px, transparent 1px);
+  border-color: rgba(255, 255, 255, 0.25);
+  animation: gaming-pulse 2.5s ease-in-out infinite;
+}
+body.gaming .canvas svg { animation: gaming-glow 3s linear infinite; }
+body.gaming .canvas svg line { stroke: #FF2D55; }
+body.gaming .canvas svg polygon { fill: #FF2D55; }
+/* 要因と問題の箱は中身ごと塗る。文字は白にして、黒いふちで読みやすくする */
+body.gaming .canvas svg > rect:not(:first-child) { fill: #E8174A; stroke: #FF6F8E; }
+body.gaming .canvas svg text { fill: #FFFFFF; stroke: rgba(0, 0, 0, 0.55); stroke-width: 3px; paint-order: stroke fill; stroke-linejoin: round; }
+body.gaming .canvas svg .ui-button circle { fill: #14141F; }
+body.gaming .canvas svg .ui-button rect { fill: #14141F; stroke: #FF2D55; }
+/* 動きを減らす設定の人には、色を止めたままにする */
+@media (prefers-reduced-motion: reduce) {
+  body.gaming, body.gaming .canvas svg, body.gaming header h1 span, body.gaming header h1 .logo, body.gaming .preview,
+  body.gaming header button, body.gaming .help-button { animation: none; }
+}
 </style>
 </head>
 <body>
@@ -766,6 +833,8 @@ function drawSpineAndHead(svg, layout, theme, editMode) {
     { size: head.size, bold: true, color: theme.headText, anchor: "middle" });
 
   if (!editMode) return;
+  // 背骨の矢印の先：ゲーミングフィッシュボーンの隠しスイッチ（長押し）。見た目は出さない
+  svg.appendChild(svgElement("circle", { cx: headX - 16, cy: spineY, r: 22, fill: "transparent", class: "spine-arrow" }));
   addEditableArea(svg, "head", headX, headTop, HEAD_WIDTH, headHeight);
 
   if (data.bones.length < MAX_BONES) {
@@ -2059,6 +2128,62 @@ document.addEventListener("click", event => {
 });
 document.addEventListener("keydown", event => {
   if (event.key === "Escape") closeAllDropdowns();
+});
+
+
+// ===== 12-2. ゲーミングフィッシュボーン（隠し機能） =====
+//  パソコン：キーボードで ↑↑↓↓←→←→BA と押す。スマホ：背骨の矢印の先を長押しする。
+//  もう一度同じ操作で元に戻る。見た目を画面の上で変えるだけで、保存データと書き出しはいつもの配色のまま。
+//  ページを開き直すと元に戻る（ブラウザには覚えさせない）
+
+const GAMING_COMMAND = ["arrowup", "arrowup", "arrowdown", "arrowdown", "arrowleft", "arrowright", "arrowleft", "arrowright", "b", "a"];
+const GAMING_LONG_PRESS_MS = 800;
+let recentKeys = [];
+let gamingPressTimer = null;
+
+function toggleGamingMode() {
+  const isOn = document.body.classList.toggle("gaming");
+  // タイトルの文字も入れ替える（元の文字は覚えておいて戻す）
+  document.querySelectorAll("header h1 span").forEach(span => {
+    if (!span.dataset.normalText) span.dataset.normalText = span.textContent;
+    const gamingText = span.classList.contains("title-short") ? "ゲーミング" : "ゲーミングフィッシュボーン";
+    span.textContent = isOn ? gamingText : span.dataset.normalText;
+  });
+  showStatus(isOn ? "ゲーミングフィッシュボーン ON" : "ゲーミングフィッシュボーン OFF");
+}
+
+document.addEventListener("keydown", event => {
+  // 文字を入力しているときは数えない
+  if (event.target.closest && event.target.closest("input, textarea")) return;
+  // 直近に押したキーを覚えておき、最後の10個がコマンドと同じなら切り替える
+  recentKeys.push(event.key.toLowerCase());
+  if (recentKeys.length > GAMING_COMMAND.length) recentKeys.shift();
+  if (recentKeys.join(",") === GAMING_COMMAND.join(",")) {
+    recentKeys = [];
+    toggleGamingMode();
+  }
+});
+
+function cancelGamingPress() {
+  clearTimeout(gamingPressTimer);
+  gamingPressTimer = null;
+}
+let gamingPressStart = null;
+canvasElement.addEventListener("pointerdown", event => {
+  if (!event.target.closest(".spine-arrow")) return;
+  cancelGamingPress();
+  gamingPressStart = { x: event.clientX, y: event.clientY };
+  gamingPressTimer = setTimeout(() => { gamingPressTimer = null; toggleGamingMode(); }, GAMING_LONG_PRESS_MS);
+});
+// 指やマウスが動いたら（図を動かしているときなど）長押しをやめる
+canvasElement.addEventListener("pointermove", event => {
+  if (!gamingPressTimer || !gamingPressStart) return;
+  if (Math.abs(event.clientX - gamingPressStart.x) + Math.abs(event.clientY - gamingPressStart.y) > 10) cancelGamingPress();
+});
+["pointerup", "pointercancel", "pointerleave"].forEach(type => canvasElement.addEventListener(type, cancelGamingPress));
+// 長押しで出るメニュー（コピーなど）を出さない
+canvasElement.addEventListener("contextmenu", event => {
+  if (event.target.closest(".spine-arrow")) event.preventDefault();
 });
 
 
