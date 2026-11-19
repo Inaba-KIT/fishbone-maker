@@ -2125,8 +2125,9 @@ document.addEventListener("keydown", event => {
 
 const GAMING_COMMAND = ["arrowup", "arrowup", "arrowdown", "arrowdown", "arrowleft", "arrowright", "arrowleft", "arrowright", "b", "a"];
 const GAMING_LONG_PRESS_MS = 800;
-let recentKeys = [];
-let gamingPressTimer = null;
+let recentGamingKeys = [];      // 直近に押したキー（コマンドと比べる）
+let gamingPressTimer = null;     // 矢印の先を長押ししているあいだのタイマー
+let gamingPressStart = null;     // 長押しを始めた位置（動いたら長押しをやめる）
 
 // 1/f ゆらぎ（ピンクノイズ）を作る。大きくゆっくりした揺れに、小さく速い揺れを重ねていく。
 // 速さが2倍になるごとに揺れの大きさを 1/√2 にすると、ろうそくの炎や小川のような 1/f のゆらぎになる。
@@ -2209,10 +2210,10 @@ document.addEventListener("keydown", event => {
   // 文字を入力しているときは数えない
   if (event.target.closest && event.target.closest("input, textarea")) return;
   // 直近に押したキーを覚えておき、最後の10個がコマンドと同じなら切り替える
-  recentKeys.push(event.key.toLowerCase());
-  if (recentKeys.length > GAMING_COMMAND.length) recentKeys.shift();
-  if (recentKeys.join(",") === GAMING_COMMAND.join(",")) {
-    recentKeys = [];
+  recentGamingKeys.push(event.key.toLowerCase());
+  if (recentGamingKeys.length > GAMING_COMMAND.length) recentGamingKeys.shift();
+  if (recentGamingKeys.join(",") === GAMING_COMMAND.join(",")) {
+    recentGamingKeys = [];
     toggleGamingMode();
   }
 });
@@ -2221,7 +2222,7 @@ function cancelGamingPress() {
   clearTimeout(gamingPressTimer);
   gamingPressTimer = null;
 }
-let gamingPressStart = null;
+
 canvasElement.addEventListener("pointerdown", event => {
   if (!event.target.closest(".spine-arrow")) return;
   cancelGamingPress();
