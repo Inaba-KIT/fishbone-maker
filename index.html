@@ -260,34 +260,25 @@
   .status:empty { display: none; }
 
 /* ===== ゲーミングフィッシュボーン（隠し機能。コマンドで切り替え） ===== */
-@keyframes gaming-hue { from { filter: hue-rotate(0deg); } to { filter: hue-rotate(360deg); } }
-@keyframes gaming-glow {
-  from { filter: drop-shadow(0 0 3px #FF2D55) drop-shadow(0 0 7px rgba(255, 45, 85, 0.6)) hue-rotate(0deg); }
-  to   { filter: drop-shadow(0 0 3px #FF2D55) drop-shadow(0 0 7px rgba(255, 45, 85, 0.6)) hue-rotate(360deg); }
-}
-@keyframes gaming-pulse {
-  0%, 100% { box-shadow: 0 0 8px rgba(255, 45, 85, 0.4), inset 0 0 16px rgba(255, 45, 85, 0.15); }
-  50%      { box-shadow: 0 0 16px rgba(0, 199, 255, 0.5), inset 0 0 24px rgba(0, 199, 255, 0.2); }
-}
-@keyframes gaming-slide { from { background-position: 0% 0, 0% 0; } to { background-position: 0% 0, 200% 0; } }
-@keyframes gaming-bg { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
-/* 背景：虹色がゆっくり流れる */
+/* 動きは 1/f ゆらぎ（12-2 の処理が --g-… の値を少しずつ変える）。決まった周期では動かさない */
 body.gaming {
-  background: linear-gradient(120deg, #4E0078, #002E9E, #00754A, #996E00, #99003A, #4E0078);
-  background-size: 400% 400%;
-  animation: gaming-bg 8s ease-in-out infinite;
+  --g-hue: 0deg; --g-hue-num: 0; --g-glow: 4px; --g-pulse: 0.5; --g-bg: 0px; --g-slide: 0%;
+  /* 横向きの虹にして、くり返しのつなぎ目が出ないようにする（斜めだとつなぎ目が線になって見える） */
+  background: linear-gradient(90deg, #4E0078, #002E9E, #00754A, #996E00, #99003A, #4E0078);
+  background-size: 400% 100%;
+  background-position: var(--g-bg) 50%;
 }
 body.gaming header { background: rgba(8, 8, 14, 0.55); border-bottom-color: rgba(255, 255, 255, 0.08); }
 body.gaming .hint { color: #8A8AA0; }
 /* タイトルの文字を虹色に */
 body.gaming header h1 { white-space: nowrap; }
 body.gaming header h1 .logo rect { fill: #FF2D55; }
-body.gaming header h1 .logo { animation: gaming-hue 2s linear infinite; }
+body.gaming header h1 .logo { filter: hue-rotate(var(--g-hue)); }
 body.gaming header h1 span {
   background: linear-gradient(90deg, #FF2D55, #FF9500, #FFE600, #34C759, #00C7FF, #5856D6, #FF2D55);
   background-size: 200% 100%;
   -webkit-background-clip: text; background-clip: text; color: transparent;
-  animation: gaming-slide 2s linear infinite;
+  background-position: var(--g-slide) 0;
 }
 /* 上のバーのボタンは虹色の枠 */
 body.gaming header button, body.gaming .help-button {
@@ -296,23 +287,24 @@ body.gaming header button, body.gaming .help-button {
     linear-gradient(#14141F, #14141F) padding-box,
     linear-gradient(90deg, #FF2D55, #FF9500, #FFE600, #34C759, #00C7FF, #5856D6, #FF2D55) border-box;
   background-size: 100% 100%, 200% 100%;
-  animation: gaming-slide 2s linear infinite;
+  background-position: 0 0, var(--g-slide) 0;
 }
 body.gaming .menu-list { background: #14141F; border-color: #2A2A3A; }
 body.gaming .menu-list button, body.gaming .menu-list .menu-link {
-  background: transparent; border: none; animation: none; color: #FFFFFF;
+  background: transparent; border: none; color: #FFFFFF;
 }
 body.gaming .menu-list button:hover, body.gaming .menu-list .menu-link:hover { background: #23232F; }
 body.gaming .zoom-controls { background: #14141F; border-color: #2A2A3A; }
-body.gaming .zoom-controls button { background: transparent; color: #FFFFFF; animation: none; border: none; }
+body.gaming .zoom-controls button { background: transparent; color: #FFFFFF; border: none; }
 /* 図：線と枠を1色にして、色相を回し続ける */
 body.gaming .preview {
   background-color: rgba(8, 8, 14, 0.55);
   background-image: radial-gradient(rgba(255, 255, 255, 0.12) 1px, transparent 1px);
   border-color: rgba(255, 255, 255, 0.25);
-  animation: gaming-pulse 2.5s ease-in-out infinite;
+  box-shadow: 0 0 calc(6px + 14px * var(--g-pulse)) hsl(var(--g-hue-num) 100% 60% / 0.55),
+              inset 0 0 calc(12px + 20px * var(--g-pulse)) hsl(var(--g-hue-num) 100% 60% / 0.2);
 }
-body.gaming .canvas svg { animation: gaming-glow 3s linear infinite; }
+body.gaming .canvas svg { filter: drop-shadow(0 0 3px #FF2D55) drop-shadow(0 0 var(--g-glow) rgba(255, 45, 85, 0.6)) hue-rotate(var(--g-hue)); }
 body.gaming .canvas svg line { stroke: #FF2D55; }
 body.gaming .canvas svg polygon { fill: #FF2D55; }
 /* 要因と問題の箱は中身ごと塗る。文字は白にして、黒いふちで読みやすくする */
@@ -320,11 +312,6 @@ body.gaming .canvas svg > rect:not(:first-child) { fill: #E8174A; stroke: #FF6F8
 body.gaming .canvas svg text { fill: #FFFFFF; stroke: rgba(0, 0, 0, 0.55); stroke-width: 3px; paint-order: stroke fill; stroke-linejoin: round; }
 body.gaming .canvas svg .ui-button circle { fill: #14141F; }
 body.gaming .canvas svg .ui-button rect { fill: #14141F; stroke: #FF2D55; }
-/* 動きを減らす設定の人には、色を止めたままにする */
-@media (prefers-reduced-motion: reduce) {
-  body.gaming, body.gaming .canvas svg, body.gaming header h1 span, body.gaming header h1 .logo, body.gaming .preview,
-  body.gaming header button, body.gaming .help-button { animation: none; }
-}
 </style>
 </head>
 <body>
@@ -2141,8 +2128,74 @@ const GAMING_LONG_PRESS_MS = 800;
 let recentKeys = [];
 let gamingPressTimer = null;
 
+// 1/f ゆらぎ（ピンクノイズ）を作る。大きくゆっくりした揺れに、小さく速い揺れを重ねていく。
+// 速さが2倍になるごとに揺れの大きさを 1/√2 にすると、ろうそくの炎や小川のような 1/f のゆらぎになる。
+// 戻り値は、時刻（秒）を入れると -1〜1 の値を返す関数
+function createFluctuation(seed) {
+  const randomAt = i => {
+    const h = Math.sin(i * 127.1 + seed * 311.7) * 43758.5453;
+    return (h - Math.floor(h)) * 2 - 1;
+  };
+  // 整数の点ごとの乱数を、なめらかにつないだ揺れ
+  const smoothNoise = x => {
+    const i = Math.floor(x);
+    const t = (1 - Math.cos((x - i) * Math.PI)) / 2;
+    return randomAt(i) * (1 - t) + randomAt(i + 1) * t;
+  };
+  return time => {
+    let sum = 0;
+    let total = 0;
+    for (let octave = 0; octave < 6; octave++) {
+      const amplitude = Math.pow(2, -octave / 2);
+      sum += amplitude * smoothNoise(time * 0.35 * Math.pow(2, octave) + octave * 17.3);
+      total += amplitude;
+    }
+    return sum / total;
+  };
+}
+
+const gamingWaves = { hue: createFluctuation(1), glow: createFluctuation(2), pulse: createFluctuation(3), background: createFluctuation(4) };
+let gamingFrame = null;
+let gamingHue = 0;
+let gamingBackgroundShift = 0;   // 背景の虹を流した量（px）
+let gamingLastTime = null;
+
+// 毎フレーム、ゆらぎの値を CSS の変数に入れる。
+// 色と背景の虹は、いつも同じ向きに進み、進む速さだけがゆらぐ
+function updateGamingFrame(now) {
+  const seconds = now / 1000;
+  const elapsed = gamingLastTime === null ? 0 : Math.min(0.1, seconds - gamingLastTime);
+  gamingLastTime = seconds;
+  gamingHue = (gamingHue + elapsed * (90 + 70 * gamingWaves.hue(seconds))) % 360;
+  const style = document.body.style;
+  style.setProperty("--g-hue", `${gamingHue.toFixed(1)}deg`);
+  style.setProperty("--g-hue-num", gamingHue.toFixed(1));
+  style.setProperty("--g-glow", `${(7 + 5 * gamingWaves.glow(seconds)).toFixed(1)}px`);
+  style.setProperty("--g-pulse", (0.5 + 0.5 * gamingWaves.pulse(seconds)).toFixed(3));
+  // 背景の虹は左から右へ流す。虹の模様は画面4つ分の幅でくり返すので、その幅で折り返す
+  const backgroundWidth = window.innerWidth * 4;
+  gamingBackgroundShift = (gamingBackgroundShift + elapsed * (120 + 80 * gamingWaves.background(seconds))) % backgroundWidth;
+  style.setProperty("--g-bg", `${gamingBackgroundShift.toFixed(1)}px`);
+  style.setProperty("--g-slide", `${((gamingHue / 360) * 200).toFixed(1)}%`);
+  gamingFrame = requestAnimationFrame(updateGamingFrame);
+}
+
+function startGamingMotion() {
+  // 動きを減らす設定の人には、色を付けたまま止めておく
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  gamingLastTime = null;
+  gamingFrame = requestAnimationFrame(updateGamingFrame);
+}
+
+function stopGamingMotion() {
+  if (gamingFrame !== null) cancelAnimationFrame(gamingFrame);
+  gamingFrame = null;
+  ["--g-hue", "--g-hue-num", "--g-glow", "--g-pulse", "--g-bg", "--g-slide"].forEach(name => document.body.style.removeProperty(name));
+}
+
 function toggleGamingMode() {
   const isOn = document.body.classList.toggle("gaming");
+  if (isOn) startGamingMotion(); else stopGamingMotion();
   // タイトルの文字も入れ替える（元の文字は覚えておいて戻す）
   document.querySelectorAll("header h1 span").forEach(span => {
     if (!span.dataset.normalText) span.dataset.normalText = span.textContent;
