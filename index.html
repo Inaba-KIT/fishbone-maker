@@ -457,10 +457,11 @@ const DEFAULT_THEME = "navy";
 // 図の大きさ（単位は図の中のピクセル。画面ではこれを拡大・縮小して表示する）
 const PADDING = 30;             // 図のまわりの余白
 const SMALL_LENGTH = 180;       // 小骨の長さ
-const SMALL_GAP = 64;           // 小骨どうしの最小の間隔（「−」ボタンの分も含む）
+const SMALL_GAP = 50;           // 小骨どうしの最小の間隔（2行の文字が入る高さ）
 const END_GAP = 76;             // 大骨の名前の枠の近くは「＋」ボタンのために小骨を置かない
 const SMALL_TEXT_HEIGHT = 38;   // 小骨の文字をクリックできる範囲の高さ
-const MIN_BONE_HEIGHT = 190;    // 大骨の縦の長さ（最小）
+const MIN_BONE_HEIGHT = 180;    // 大骨の縦の長さ（最小）
+const MINUS_BUTTON_ROOM = 24;   // 小骨の線の左に置く「−」ボタンのための幅
 // 書き出し（PNG・PDF・PowerPoint）ではボタンがないので、小骨の間隔を詰めてスカスカに見えないようにする
 const EXPORT_SMALL_GAP = 52;
 const EXPORT_END_GAP = 44;
@@ -766,7 +767,7 @@ function calculateLayout(editMode = true) {
   // いちばん左の大骨の左側に必要な幅（名前の枠と、いちばん外側の小骨のどちらか大きい方）
   const leftExtent = Math.max(
     boneLean + LABEL_WIDTH / 2,
-    boneLean * (1 - endGap / boneHeight) + SMALL_LENGTH
+    boneLean * (1 - endGap / boneHeight) + SMALL_LENGTH + (editMode ? MINUS_BUTTON_ROOM : 0)
   );
   const firstAttachX = PADDING + leftExtent;
   const headX = firstAttachX + (columnCount - 1) * COLUMN_GAP + 70;
@@ -960,9 +961,9 @@ function drawBone(svg, layout, theme, editMode, bone, boneIndex) {
     // クリック範囲は線の上側。上側・下側どちらの大骨でも同じ大きさにする
     addEditableArea(svg, `small-${boneIndex}-${smallIndex}`,
       lineStartX, pointY - SMALL_TEXT_HEIGHT - 2, SMALL_LENGTH - 8, SMALL_TEXT_HEIGHT);
-    // 小骨を消す「−」：線の左端の下（文字のクリック範囲とは線をはさんで反対側）
+    // 小骨を消す「−」：線の左端の横（文字のクリック範囲の外側）
     if (count > 1) {
-      addRoundButton(svg, lineStartX + 10, pointY + 14, 8, "minus", DANGER_COLOR, "この小骨を削除", () => {
+      addRoundButton(svg, lineStartX - 16, pointY, 8, "minus", DANGER_COLOR, "この小骨を削除", () => {
         bone.smalls.splice(smallIndex, 1);
         saveAndRender();
       });
