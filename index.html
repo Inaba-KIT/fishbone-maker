@@ -461,6 +461,10 @@ const SMALL_GAP = 64;           // 小骨どうしの最小の間隔（「−」
 const END_GAP = 76;             // 大骨の名前の枠の近くは「＋」ボタンのために小骨を置かない
 const SMALL_TEXT_HEIGHT = 38;   // 小骨の文字をクリックできる範囲の高さ
 const MIN_BONE_HEIGHT = 190;    // 大骨の縦の長さ（最小）
+// 書き出し（PNG・PDF・PowerPoint）ではボタンがないので、小骨の間隔を詰めてスカスカに見えないようにする
+const EXPORT_SMALL_GAP = 46;
+const EXPORT_END_GAP = 44;
+const EXPORT_MIN_BONE_HEIGHT = 150;
 const BONE_LEAN = 0.6;          // 大骨の傾き（横の長さ ÷ 縦の長さ）
 const BONE_OVERLAP = 8;         // 大骨の線を名前の枠の中まで延ばす長さ（すき間なくつなげるため）
 const COLUMN_GAP = SMALL_LENGTH + 60;  // 大骨どうしの横の間隔
@@ -747,23 +751,27 @@ function recordShape(shape) {
 
 
 // 図全体の大きさと、背骨・各大骨の位置を計算する
-function calculateLayout() {
+// editMode が false（書き出し）のときは、小骨の間隔を詰めた大きさで計算する
+function calculateLayout(editMode = true) {
+  const smallGap = editMode ? SMALL_GAP : EXPORT_SMALL_GAP;
+  const endGap = editMode ? END_GAP : EXPORT_END_GAP;
+  const minBoneHeight = editMode ? MIN_BONE_HEIGHT : EXPORT_MIN_BONE_HEIGHT;
   const columnCount = Math.ceil(data.bones.length / 2);
   const maxSmalls = Math.max(1, ...data.bones.map(bone => bone.smalls.length));
 
-  const boneHeight = Math.max(MIN_BONE_HEIGHT, END_GAP + maxSmalls * SMALL_GAP);
+  const boneHeight = Math.max(minBoneHeight, endGap + maxSmalls * smallGap);
   const boneLean = boneHeight * BONE_LEAN;
   // いちばん左の大骨の左側に必要な幅（名前の枠と、いちばん外側の小骨のどちらか大きい方）
   const leftExtent = Math.max(
     boneLean + LABEL_WIDTH / 2,
-    boneLean * (1 - END_GAP / boneHeight) + SMALL_LENGTH
+    boneLean * (1 - endGap / boneHeight) + SMALL_LENGTH
   );
   const firstAttachX = PADDING + leftExtent;
   const headX = firstAttachX + (columnCount - 1) * COLUMN_GAP + 70;
   const spineY = PADDING + LABEL_ROOM + boneHeight;
 
   return {
-    columnCount, boneHeight, boneLean, firstAttachX, headX, spineY,
+    columnCount, boneHeight, boneLean, firstAttachX, headX, spineY, endGap,
     width: headX + HEAD_WIDTH + PADDING,
     height: spineY + boneHeight + LABEL_ROOM + PADDING
   };
@@ -772,7 +780,7 @@ function calculateLayout() {
 // editMode が true のときは、ボタン・案内文字・クリック範囲も描く（画面表示用）
 // false のときは図だけを描く（PNG・PDF用）
 function buildSvg(editMode) {
-  const layout = calculateLayout();
+  const layout = calculateLayout(editMode);
   const theme = currentTheme();
 
   const svg = svgElement("svg", {
@@ -912,13 +920,13 @@ function drawBone(svg, layout, theme, editMode, bone, boneIndex) {
     }
   }
 
-  // 小骨：名前の枠の近く（END_GAP）を空けて、残りの長さに等間隔で並べる。
+  // 小骨：名前の枠の近く（layout.endGap）を空けて、残りの長さに等間隔で並べる。
   // 入力の順番が、図でも上から順になるようにする
   const count = bone.smalls.length;
-  const step = (boneHeight - END_GAP) / count;
+  const step = (boneHeight - layout.endGap) / count;
   bone.smalls.forEach((small, smallIndex) => {
     const orderFromEnd = isTop ? smallIndex : count - 1 - smallIndex;
-    const ratio = 1 - (END_GAP + orderFromEnd * step) / boneHeight;  // 背骨からの割合
+    const ratio = 1 - (layout.endGap + orderFromEnd * step) / boneHeight;  // 背骨からの割合
     const pointX = attachX - boneLean * ratio;  // 大骨とつながる点
     const pointY = spineY + direction * boneHeight * ratio;
     const lineStartX = pointX - SMALL_LENGTH;
@@ -1619,7 +1627,7 @@ async function exportPptx() {
     // 図を描きながら図形を記録する（画面には出さない）
     const { shapes, layout } = drawForExport(choice.prune, () => {
       shapeRecorder = [];
-      const layout = calculateLayout();
+      const layout = calculateLayout(false);
       buildSvg(false);
       const shapes = shapeRecorder;
       shapeRecorder = null;
