@@ -462,7 +462,7 @@ const END_GAP = 76;             // 大骨の名前の枠の近くは「＋」ボ
 const SMALL_TEXT_HEIGHT = 38;   // 小骨の文字をクリックできる範囲の高さ
 const MIN_BONE_HEIGHT = 190;    // 大骨の縦の長さ（最小）
 // 書き出し（PNG・PDF・PowerPoint）ではボタンがないので、小骨の間隔を詰めてスカスカに見えないようにする
-const EXPORT_SMALL_GAP = 46;
+const EXPORT_SMALL_GAP = 52;
 const EXPORT_END_GAP = 44;
 const EXPORT_MIN_BONE_HEIGHT = 150;
 const BONE_LEAN = 0.6;          // 大骨の傾き（横の長さ ÷ 縦の長さ）
@@ -490,13 +490,15 @@ const LABEL_FONT_STEPS = [
   { size: 13, lineHeight: 17, maxLines: 3 },
   { size: 12, lineHeight: 15, maxLines: 3 }
 ];
-//   小骨：20文字ほどまでは14pxで2行
+//   小骨：太字。20文字ほどまでは14〜16pxで2行
 const SMALL_FONT_STEPS = [
+  { size: 16, lineHeight: 20, maxLines: 2 },
+  { size: 15, lineHeight: 19, maxLines: 2 },
   { size: 14, lineHeight: 18, maxLines: 2 },
   { size: 13, lineHeight: 16, maxLines: 2 },
-  { size: 12, lineHeight: 15, maxLines: 2 },
-  { size: 11, lineHeight: 13, maxLines: 3 }
+  { size: 12, lineHeight: 14, maxLines: 3 }
 ];
+const SMALL_BOLD = true;   // 小骨の文字は太字
 
 // 表示の拡大・縮小
 const MIN_ZOOM = 0.3;
@@ -742,7 +744,7 @@ function addEditableArea(parent, key, x, y, width, height) {
 // shapeRecorder が配列のときだけ、図を描きながら図形の情報をそこに追加する
 //   { type: "line", x1, y1, x2, y2, width, color, arrowEnd, group }
 //   { type: "box",  x, y, w, h, fill, stroke, strokeWidth, text, fontSize, bold, textColor, group }
-//   { type: "text", x, y, w, h, text, fontSize, color, group }   （y は箱の上端。文字は箱の下に揃える）
+//   { type: "text", x, y, w, h, text, fontSize, bold, color, group }   （y は箱の上端。文字は箱の下に揃える）
 let shapeRecorder = null;
 
 function recordShape(shape) {
@@ -941,13 +943,13 @@ function drawBone(svg, layout, theme, editMode, bone, boneIndex) {
     const textWidth = isTop ? SMALL_LENGTH - 40 : SMALL_LENGTH - 12;
     const text = small.trim();
     if (text !== "") {
-      const fitted = fitText(text, SMALL_FONT_STEPS, false, textWidth);
+      const fitted = fitText(text, SMALL_FONT_STEPS, SMALL_BOLD, textWidth);
       addTextLines(svg, fitted.lines, lineStartX, pointY - 6 - (fitted.lines.length - 1) * fitted.lineHeight,
-        fitted.lineHeight, { size: fitted.size, bold: false, color: LINE_COLOR });
+        fitted.lineHeight, { size: fitted.size, bold: SMALL_BOLD, color: LINE_COLOR });
       const textHeight = fitted.lines.length * fitted.lineHeight + 6;
       recordShape({
         type: "text", x: lineStartX, y: pointY - 2 - textHeight, w: textWidth, h: textHeight,
-        text: text, fontSize: fitted.size, color: LINE_COLOR, group: groupName
+        text: text, fontSize: fitted.size, bold: SMALL_BOLD, color: LINE_COLOR, group: groupName
       });
     } else if (editMode) {
       addTextLines(svg, [isTouchDevice ? "タップして入力" : "クリックして入力"], lineStartX, pointY - 6, 0,
@@ -1161,7 +1163,7 @@ function openEditor(key, autoAdded = false) {
   const canvasBox = canvasElement.getBoundingClientRect();
   const areaBox = area.getBoundingClientRect();
   const scale = svg.getBoundingClientRect().width / Number(svg.getAttribute("width"));
-  const baseFontSize = key === "head" ? 22 : key.startsWith("bone") ? 18 : 14;
+  const baseFontSize = key === "head" ? 22 : key.startsWith("bone") ? 18 : 16;
 
   // 入力欄は、マウスを乗せたときに出る点線の枠とぴったり同じ位置・大きさにする。
   // 位置は図（canvas）の左上が基準なので、スクロールしても図と一緒に動く
@@ -1721,7 +1723,7 @@ function buildSlideXml(shapes, layout) {
       `<p:spPr><a:xfrm><a:off x="${box.left}" y="${box.top}"/><a:ext cx="${box.right - box.left}" cy="${box.bottom - box.top}"/></a:xfrm>` +
       `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr>` +
       `<p:txBody><a:bodyPr wrap="square" lIns="0" tIns="0" rIns="0" bIns="0" anchor="b"><a:noAutofit/></a:bodyPr><a:lstStyle/>` +
-      `<a:p><a:r><a:rPr lang="ja-JP" sz="${toFontSize(shape.fontSize)}">` +
+      `<a:p><a:r><a:rPr lang="ja-JP" sz="${toFontSize(shape.fontSize)}" b="${shape.bold ? 1 : 0}">` +
       `<a:solidFill><a:srgbClr val="${hexColor(shape.color)}"/></a:solidFill>${fontXml}</a:rPr>` +
       `<a:t>${escapeXml(shape.text)}</a:t></a:r></a:p></p:txBody></p:sp>`;
   }
